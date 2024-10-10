@@ -28,7 +28,7 @@ if else for while break continue return bit int4 int8 int16 int32 char void
 [ \t\n]* | [\\\n]*
 
 7. comments
-/*.**/ | //.*\n | //.*EOF
+/\*.\*\*/ | //.*\n | //.*EOF
 
 ## How to test the lexer
 python3 lexer.py sourcefile

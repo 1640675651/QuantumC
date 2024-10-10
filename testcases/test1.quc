@@ -1,0 +1,4 @@
+int4 main() // hello world
+{
+	print("hello world");
+}

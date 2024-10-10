@@ -1,0 +1,4 @@
+int16 main()
+{
+	char a[10] = "abcdefg;
+}

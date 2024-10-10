@@ -1,0 +1,14 @@
+if else for while break continue return bit int4 int8 int16 int32 char void
+aaa _ABC _123ab ab123
++-*/% = &|~^ && || ! <> <= >= == != << >> ++ -- += -= *= /= &= |= ~= ^= &&= ||= %= <<= >>=
+123 0123
+"abcdefg" 'a'
+()[]{},:;
+"string \
+in \
+multiple \
+lines"
+	   	
+/*some random !@#$%^&*()*/
+//Line comment
+//Line comment at the end of file	   	

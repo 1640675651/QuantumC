@@ -1,4 +1,3 @@
-
 # Lexer
 
 ## Token types:
@@ -33,3 +32,6 @@ if else for while break continue return bit int4 int8 int16 int32 char void
 ## How to test the lexer
 python3 lexer.py sourcefile
 This will output the token list to stdout
+
+# Team member
+Hongzheng Zhu hz2915

@@ -247,28 +247,68 @@ class STMTLIST_node(ptnode):
 		super().__init__('STMTLIST', buf)
 	
 	# rules: STMTLIST -> STMT STMTLIST | epsilon
-	# STMT -> VARDECL | ARRDECL | CALL | IFELSE | FOR | WHILE | {STMTLIST} | break ; | continue ; | return ; | ;
+	# STMT -> VARDECL | ARRDECL | CALL | IFELSE | FOR | WHILE | CPDSTMT | break ; | continue ; | return ; | ;
+	# CPDSTMT -> { STMTLIST }
 	def expand(self):
 		def nextstmt(buf) -> ('parsed len', ptnode):
 			# these statements need to be handled recursively
 			if buf[0].type == 'kw':
 				if buf[0].value == 'if': # IFELSE
-					pass
-				if buf[0].value == 'for': # FOR
-					pass
-				if buf[0].value == 'while': # WHILE
-					pass	
+					# rule: IFELSE -> if (EXPR) STMT | if (EXPR) STMT else STMT
+					# 1. find if condition in parentheses
+					if len(buf) < 2 or buf[1].value != '(':
+						return -1, parserError(buf[0].row, buf[0].col, "the for/while loop needs condition")
+					cond_end = pairmatch(buf, 1, '(', ')')
+					if cond_end == -1:
+						return -1, parserError(buf[1].row, buf[1].col, "unmatched '('")
+					# 2. find the statement immediately after the if condition (recursive call)
+					plen, newnode = nextstmt(buf[cond_end+1:])
+					if plen == -1:
+						return -1, newnode
+					tot_len = cond_end + 1 + plen
+					# 3. check whether else exists
+					if tot_len < len(buf) and buf[tot_len].type == 'kw' and buf[tot_len].value == 'else':
+						# find the statement immediately after the else (recursive call)
+						plen, newnode = nextstmt(buf[cond_end+1:])
+						if plen == -1:
+							return -1, newnode
+						tot_len += plen
+					return tot_len, IFELSE_node(buf[:tot_len])
+
+				if buf[0].value == 'for' or buf[0].value == 'while': # FOR/WHILE
+					# rules: FOR -> for (FORCOND) STMT
+					# WHILE -> while (EXPR) STMT
+					# 1. find for/while condition in parentheses
+					if len(buf) < 2 or buf[1].value != '(':
+						return -1, parserError(buf[0].row, buf[0].col, "the for/while loop needs condition")
+					cond_end = pairmatch(buf, 1, '(', ')')
+					if cond_end == -1:
+						return -1, parserError(buf[1].row, buf[1].col, "unmatched '('")
+					# 2. find the statement immediately after the for condition (recursive call)
+					plen, newnode = nextstmt(buf[cond_end+1:])
+					if plen == -1:
+						return -1, newnode
+					tot_len = cond_end + 1 + plen
+					if buf[0].value == 'for':
+						return tot_len, FOR_node(buf[:tot_len])
+					else:
+						return tot_len, WHILE_node(buf[:tot_len])
+
 			if buf[0].type == 'punc' and buf[0].value == '{': # {STMTLIST} compound statment
-				pass
+				closing_index = pairmatch(buf, 0, '{', '}')
+				if closing_index == -1:
+					return parserError(buf[0].row, buf[0].col, "unclosed '{'")
+				return closing_index+1, CPDSTMT_node(buf[closing_index+1])
+
 			# otherwise, the statement should end with ;
-			nextindex = findnext(self.buf, 0, ';')
+			nextindex = findnext(buf, 0, ';')
 			if nextindex == -1:
 				return -1, parserError(buf[0].row, buf[0].col, "expect ';' after a statement")
 			# classify which statement it is
 			if len(buf) == 1: # empty statement ;
 				return 1, buf[0]
 			if istype(buf[0]): # the first token is TYPE, must be a DECL
-				return nextdecl(self.buf)
+				return nextdecl(buf)
 			if isselfop(buf[0]): # increment or decrement operator ASSIGN
 				return nextindex+1, ASSIGN_node(buf[:nextindex+1])
 			if buf[0].type == 'id':
@@ -276,7 +316,7 @@ class STMTLIST_node(ptnode):
 					return nextindex+1, ASSIGN_node(buf[:nextindex+1])
 				if buf[1].value == '(': # CALL
 					return nextindex+1, CALL_node(buf[:nextindex+1])
-				print(buf)
+				#print(buf)
 				return -1, parserError(buf[1].row, buf[1].col, f"expect operator for identifier {buf[0].value}")
 			if isjmp(buf[0]): # break/continue/return
 				return len(buf), JMP_node(buf)
@@ -301,6 +341,34 @@ class CALL_node(ptnode):
 class JMP_node(ptnode):
 	def __init__(self, buf: ['token']):
 		super().__init__('JMP', buf)
+
+class IFELSE_node(ptnode):
+	def __init__(self, buf: ['token']):
+		super().__init__('IFELSE', buf)
+	
+	def expand(self):
+		pass
+
+class FOR_node(ptnode):
+	def __init__(self, buf: ['token']):
+		super().__init__('FOR', buf)
+	
+	def expand(self):
+		pass
+
+class WHILE_node(ptnode):
+	def __init__(self, buf: ['token']):
+		super().__init__('WHILE', buf)
+	
+	def expand(self):
+		pass
+
+class CPDSTMT_node(ptnode):
+	def __init__(self, buf: ['token']):
+		super().__init__('CPDSTMT', buf)
+	
+	def expand(self):
+		pass
 
 class EXPR_node(ptnode):
 	def __init__(self, buf: ['token']):

@@ -1,0 +1,16 @@
+// test function call and global variable
+int16 global_var = 0;
+int16 global_arr[10];
+
+int8 add(int8 a, int8 b)
+{
+	return a + b;
+}
+
+int16 main()
+{
+	int8 a = 1;
+	int8 b = 2;
+	global_var = add(a, b);
+	print(global_var);
+}

@@ -30,11 +30,15 @@ class lexerError():
 		return "Lexical error at row " + str(self.row) + ' col ' + str(self.col) + ": " + self.info
 
 class token():
-	def __init__(self, token_type: str, value: str):
+	def __init__(self, token_type: str, value: str, row: int, col: int):
 		self.type = token_type
 		self.value = value
+		self.row = row
+		self.col = col
 	def __str__(self):
 		return '<'+self.type+', '+self.value+'>'
+	def __repr__(self):
+		return str(self)
 
 
 class lexer():
@@ -124,7 +128,7 @@ class lexer():
 		# check if an identifier is actually a keyword
 		if state == 2 and value in self.keywords:
 			state = 1 
-		return token(self.states[state], value)
+		return token(self.states[state], value, self.row, self.col)
 
 	def transition_empty(self, curstr: str, c: 'char') -> int:
 		if isletter(c) or c == '_': #id

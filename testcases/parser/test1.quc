@@ -1,0 +1,17 @@
+// sum all even numbers between 0 and 100
+int16 main()
+{
+	int8 i;
+	bit b;
+	int16 result = 0;
+
+	for(i=0;i<100;i++)
+	{
+		b = i[0];
+		if(b == 0)
+		{
+			result += i;
+		}
+	}
+	print(result);
+}

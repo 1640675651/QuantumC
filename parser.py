@@ -122,6 +122,70 @@ def nextdecl(buf) -> ('parsed len', ptnode):
 		return end, FUNCDECL_node(buf[:end])
 	return -1, parserError(buf[2].row, buf[2].col, f"unexpected token {buf[2].value} in declaration")
 
+def nextstmt(buf) -> ('parsed len', ptnode):
+	# these statements need to be handled recursively
+	if buf[0].type == 'kw':
+		if buf[0].value == 'if': # IFELSE
+			# rule: IFELSE -> if (EXPR) STMT | if (EXPR) STMT else STMT
+			# 1. find if condition in parentheses
+			if len(buf) < 2 or buf[1].value != '(':
+				return -1, parserError(buf[0].row, buf[0].col, "the for/while loop needs condition")
+			cond_end = pairmatch(buf, 1, '(', ')')
+			if cond_end == -1:
+				return -1, parserError(buf[1].row, buf[1].col, "unmatched '('")
+			# 2. find the statement immediately after the if condition (recursive call)
+			plen, newnode = nextstmt(buf[cond_end+1:])
+			if plen == -1:
+				return -1, newnode
+			tot_len = cond_end + 1 + plen
+			# 3. check whether else exists
+			if tot_len < len(buf) and buf[tot_len].type == 'kw' and buf[tot_len].value == 'else':
+				# find the statement immediately after the else (recursive call)
+				tot_len += 1 # kw else
+				plen, newnode = nextstmt(buf[tot_len:])
+				if plen == -1:
+					return -1, newnode
+				tot_len += plen
+			return tot_len, IFELSE_node(buf[:tot_len])
+
+		if buf[0].value == 'for' or buf[0].value == 'while': # FOR/WHILE
+			# rules: FOR -> for (FOREXPR) STMT
+			# WHILE -> while (EXPR) STMT
+			# 1. find for/while condition in parentheses
+			if len(buf) < 2 or buf[1].value != '(':
+				return -1, parserError(buf[0].row, buf[0].col, "the for/while loop needs condition")
+			cond_end = pairmatch(buf, 1, '(', ')')
+			if cond_end == -1:
+				return -1, parserError(buf[1].row, buf[1].col, "unmatched '('")
+			# 2. find the statement immediately after the for condition (recursive call)
+			plen, newnode = nextstmt(buf[cond_end+1:])
+			if plen == -1:
+				return -1, newnode
+			tot_len = cond_end + 1 + plen
+			if buf[0].value == 'for':
+				return tot_len, FOR_node(buf[:tot_len])
+			else:
+				return tot_len, WHILE_node(buf[:tot_len])
+
+	if buf[0].type == 'punc' and buf[0].value == '{': # {STMTLIST} compound statment
+		closing_index = pairmatch(buf, 0, '{', '}')
+		if closing_index == -1:
+			return parserError(buf[0].row, buf[0].col, "unclosed '{'")
+		return closing_index+1, CPDSTMT_node(buf[:closing_index+1])
+
+	# otherwise, the statement should end with ;
+	nextindex = findnext(buf, 0, ';')
+	if nextindex == -1:
+		return -1, parserError(buf[0].row, buf[0].col, "expect ';' after a statement")
+	# classify which statement it is
+	if len(buf) == 1: # empty statement ;
+		return 1, buf[0]
+	if istype(buf[0]): # DECL
+		return nextdecl(buf)
+	if isjmp(buf[0]): # JMP
+		return nextindex+1, JMP_node(buf[:nextindex+1])
+	return nextindex+1, EXPRSTMT_node(buf[:nextindex+1])
+
 class S_node(ptnode):
 	def __init__(self, buf: ['token']):
 		super().__init__('S', buf)
@@ -247,81 +311,11 @@ class STMTLIST_node(ptnode):
 		super().__init__('STMTLIST', buf)
 	
 	# rules: STMTLIST -> STMT STMTLIST | epsilon
-	# STMT -> VARDECL | ARRDECL | CALL | IFELSE | FOR | WHILE | CPDSTMT | break ; | continue ; | return ; | ;
+	# STMT -> VARDECL | ARRDECL | IFELSE | FOR | WHILE | CPDSTMT | EXPR ; | JMP ; | ;
 	# CPDSTMT -> { STMTLIST }
+	# JMP -> break; | continue ; | RETURN
+	# RETURN -> return ; | return EXPR ;
 	def expand(self):
-		def nextstmt(buf) -> ('parsed len', ptnode):
-			# these statements need to be handled recursively
-			if buf[0].type == 'kw':
-				if buf[0].value == 'if': # IFELSE
-					# rule: IFELSE -> if (EXPR) STMT | if (EXPR) STMT else STMT
-					# 1. find if condition in parentheses
-					if len(buf) < 2 or buf[1].value != '(':
-						return -1, parserError(buf[0].row, buf[0].col, "the for/while loop needs condition")
-					cond_end = pairmatch(buf, 1, '(', ')')
-					if cond_end == -1:
-						return -1, parserError(buf[1].row, buf[1].col, "unmatched '('")
-					# 2. find the statement immediately after the if condition (recursive call)
-					plen, newnode = nextstmt(buf[cond_end+1:])
-					if plen == -1:
-						return -1, newnode
-					tot_len = cond_end + 1 + plen
-					# 3. check whether else exists
-					if tot_len < len(buf) and buf[tot_len].type == 'kw' and buf[tot_len].value == 'else':
-						# find the statement immediately after the else (recursive call)
-						plen, newnode = nextstmt(buf[cond_end+1:])
-						if plen == -1:
-							return -1, newnode
-						tot_len += plen
-					return tot_len, IFELSE_node(buf[:tot_len])
-
-				if buf[0].value == 'for' or buf[0].value == 'while': # FOR/WHILE
-					# rules: FOR -> for (FORCOND) STMT
-					# WHILE -> while (EXPR) STMT
-					# 1. find for/while condition in parentheses
-					if len(buf) < 2 or buf[1].value != '(':
-						return -1, parserError(buf[0].row, buf[0].col, "the for/while loop needs condition")
-					cond_end = pairmatch(buf, 1, '(', ')')
-					if cond_end == -1:
-						return -1, parserError(buf[1].row, buf[1].col, "unmatched '('")
-					# 2. find the statement immediately after the for condition (recursive call)
-					plen, newnode = nextstmt(buf[cond_end+1:])
-					if plen == -1:
-						return -1, newnode
-					tot_len = cond_end + 1 + plen
-					if buf[0].value == 'for':
-						return tot_len, FOR_node(buf[:tot_len])
-					else:
-						return tot_len, WHILE_node(buf[:tot_len])
-
-			if buf[0].type == 'punc' and buf[0].value == '{': # {STMTLIST} compound statment
-				closing_index = pairmatch(buf, 0, '{', '}')
-				if closing_index == -1:
-					return parserError(buf[0].row, buf[0].col, "unclosed '{'")
-				return closing_index+1, CPDSTMT_node(buf[closing_index+1])
-
-			# otherwise, the statement should end with ;
-			nextindex = findnext(buf, 0, ';')
-			if nextindex == -1:
-				return -1, parserError(buf[0].row, buf[0].col, "expect ';' after a statement")
-			# classify which statement it is
-			if len(buf) == 1: # empty statement ;
-				return 1, buf[0]
-			if istype(buf[0]): # the first token is TYPE, must be a DECL
-				return nextdecl(buf)
-			if isselfop(buf[0]): # increment or decrement operator ASSIGN
-				return nextindex+1, ASSIGN_node(buf[:nextindex+1])
-			if buf[0].type == 'id':
-				if isassignop(buf[1]) or isselfop(buf[1]): # ASSIGN
-					return nextindex+1, ASSIGN_node(buf[:nextindex+1])
-				if buf[1].value == '(': # CALL
-					return nextindex+1, CALL_node(buf[:nextindex+1])
-				#print(buf)
-				return -1, parserError(buf[1].row, buf[1].col, f"expect operator for identifier {buf[0].value}")
-			if isjmp(buf[0]): # break/continue/return
-				return len(buf), JMP_node(buf)
-			return -1, parserError(buf[0].row, buf[0].col, "expect statement")
-
 		while len(self.buf):
 			plen, newnode = nextstmt(self.buf)
 			self.children.append(newnode)
@@ -329,10 +323,6 @@ class STMTLIST_node(ptnode):
 				break
 			else:
 				self.buf = self.buf[plen:]
-	
-class ASSIGN_node(ptnode):
-	def __init__(self, buf: ['token']):
-		super().__init__('ASSIGN', buf)
 
 class CALL_node(ptnode):
 	def __init__(self, buf: ['token']):
@@ -342,33 +332,84 @@ class JMP_node(ptnode):
 	def __init__(self, buf: ['token']):
 		super().__init__('JMP', buf)
 
+class EXPRSTMT_node(ptnode):
+	def __init__(self, buf: ['token']):
+		super().__init__('EXPRSTMT', buf)
+
 class IFELSE_node(ptnode):
+	# buf will look like if ( ... ) STMT1
+	# or if ( ... ) STMT1 else STMT2
 	def __init__(self, buf: ['token']):
 		super().__init__('IFELSE', buf)
 	
 	def expand(self):
-		pass
+		print('expanding ifelse')
+		print(self.buf)
+		self.children.append(self.buf[0]) # if
+		self.children.append(self.buf[1]) # (
+		cond_end = pairmatch(self.buf, 1, '(', ')') 
+		self.children.append(EXPR_node(self.buf[2:cond_end])) # EXPR
+		self.children.append(self.buf[cond_end]) # )
+		plen, stmt = nextstmt(self.buf[cond_end+1:])
+		self.children.append(stmt) # STMT1
+
+		plen = cond_end + 1 + plen
+		if plen < len(self.buf):
+			self.children.append(self.buf[plen])# else
+			plen1, stmt = nextstmt(self.buf[plen+1:])
+			self.children.append(stmt)
+		self.buf = []
 
 class FOR_node(ptnode):
+	# buf will look like for ( ... ) STMT
 	def __init__(self, buf: ['token']):
 		super().__init__('FOR', buf)
+	
+	# rule: FOR -> for ( FOREXPR ) STMT
+	def expand(self):
+		self.children.append(self.buf[0]) # for
+		self.children.append(self.buf[1]) # (
+		cond_end = pairmatch(self.buf, 1, '(', ')') 
+		self.children.append(FOREXPR_node(self.buf[2:cond_end])) # FOREXPR
+		self.children.append(self.buf[cond_end]) # )
+		plen, stmt = nextstmt(self.buf[cond_end+1:])
+		self.children.append(stmt) # STMT
+		self.buf = []
+
+class FOREXPR_node(ptnode):
+	def __init__(self, buf: ['token']):
+		super().__init__('FOREXPR', buf)
 	
 	def expand(self):
 		pass
 
 class WHILE_node(ptnode):
+	# buf will look like while ( ... ) STMT
 	def __init__(self, buf: ['token']):
 		super().__init__('WHILE', buf)
-	
+
+	# rule: WHILE -> while ( EXPR ) STMT
 	def expand(self):
-		pass
+		self.children.append(self.buf[0]) # while
+		self.children.append(self.buf[1]) # (
+		cond_end = pairmatch(self.buf, 1, '(', ')') 
+		self.children.append(EXPR_node(self.buf[2:cond_end])) # EXPR
+		self.children.append(self.buf[cond_end]) # )
+		plen, stmt = nextstmt(self.buf[cond_end+1:])
+		self.children.append(stmt) # STMT
+		self.buf = []
 
 class CPDSTMT_node(ptnode):
+	# buf will look like { ... }
 	def __init__(self, buf: ['token']):
 		super().__init__('CPDSTMT', buf)
 	
+	# rule: CPDSTMT -> { STMTLIST }
 	def expand(self):
-		pass
+		self.children.append(self.buf[0]) # {
+		self.children.append(STMTLIST_node(self.buf[1:-1])) # STMTLIST
+		self.children.append(self.buf[-1]) # }
+		self.buf = []
 
 class EXPR_node(ptnode):
 	def __init__(self, buf: ['token']):

@@ -219,7 +219,7 @@ class VARDECL_node(ptnode):
 		super().__init__('VARDECL', buf)
 
 	# rules: VARDECL -> TYPE id VARINIT
-	# VARINIT -> EXPR | epsilon
+	# VARINIT -> = EXPR | epsilon
 	# can combine the rules:
 	# VARINIT -> TYPE id ; | TYPE id = EXPR ;
 	def expand(self):
@@ -233,7 +233,10 @@ class VARDECL_node(ptnode):
 			return
 		if self.buf[2].value == '=': # has VARINIT
 			self.children.append(self.buf[2]) # =
-			self.children.append(EXPR_node(self.buf[3:-1]))
+			if len(self.buf) < 5:
+				self.children.append(parserError(self.buf[2].row, self.buf[2].col, "expect expression"))
+			else:
+				self.children.append(EXPR_node(self.buf[3:-1]))
 			self.children.append(self.buf[-1]) # ;
 			self.buf = []
 		else: # expected = to init a variable
@@ -304,6 +307,7 @@ class PARAMLIST_node(ptnode):
 				self.children.append(parserError(self.buf[i+2].row, self.buf[i+2].col, "expect ',' to split parameters"))
 				break
 			self.children.append(self.buf[i+2]) # ,
+		self.buf = []
 
 class STMTLIST_node(ptnode):
 	# buf can be anything
@@ -324,17 +328,34 @@ class STMTLIST_node(ptnode):
 			else:
 				self.buf = self.buf[plen:]
 
-class CALL_node(ptnode):
-	def __init__(self, buf: ['token']):
-		super().__init__('CALL', buf)
-
 class JMP_node(ptnode):
+	# buf will look like break ;
+	# or continue ;
+	# or return ... ;
 	def __init__(self, buf: ['token']):
 		super().__init__('JMP', buf)
 
+	# rules: JMP -> break ; | continue ; | return EXPR ;
+	def expand(self):
+		self.children.append(self.buf[0]) # break/continue/return
+		if len(self.buf) > 2:
+			self.children.append(EXPR_node(self.buf[1:-1])) # EXPR
+		self.children.append(self.buf[-1]) # ;
+		self.buf = []
+
 class EXPRSTMT_node(ptnode):
+	# buf will look like ... ;
 	def __init__(self, buf: ['token']):
 		super().__init__('EXPRSTMT', buf)
+	
+	# rule: EXPRSTMT -> EXPR ;
+	def expand(self):
+		if len(self.buf) <= 1:
+			self.children.append(parserError(self.buf[0].row, self.buf[1].col, "expect expression"))
+		else:
+			self.children.append(EXPR_node(self.buf[:-1])) # EXPR 
+			self.children.append(self.buf[-1]) # ;
+			self.buf = []
 
 class IFELSE_node(ptnode):
 	# buf will look like if ( ... ) STMT1
@@ -348,7 +369,10 @@ class IFELSE_node(ptnode):
 		self.children.append(self.buf[0]) # if
 		self.children.append(self.buf[1]) # (
 		cond_end = pairmatch(self.buf, 1, '(', ')') 
-		self.children.append(EXPR_node(self.buf[2:cond_end])) # EXPR
+		if cond_end <= 2: # empty EXPR
+			self.children.append(parserError(self.buf[1].row, self.buf[1].col, "expect expression"))
+		else:
+			self.children.append(EXPR_node(self.buf[2:cond_end])) # EXPR
 		self.children.append(self.buf[cond_end]) # )
 		plen, stmt = nextstmt(self.buf[cond_end+1:])
 		self.children.append(stmt) # STMT1
@@ -370,7 +394,10 @@ class FOR_node(ptnode):
 		self.children.append(self.buf[0]) # for
 		self.children.append(self.buf[1]) # (
 		cond_end = pairmatch(self.buf, 1, '(', ')') 
-		self.children.append(FOREXPR_node(self.buf[2:cond_end])) # FOREXPR
+		if cond_end <= 2: # empty FOREXPR
+			self.children.append(parserError(self.buf[1].row, self.buf[1].col, "expect for loop expression"))
+		else:
+			self.children.append(FOREXPR_node(self.buf[2:cond_end])) # FOREXPR
 		self.children.append(self.buf[cond_end]) # )
 		plen, stmt = nextstmt(self.buf[cond_end+1:])
 		self.children.append(stmt) # STMT
@@ -393,7 +420,10 @@ class WHILE_node(ptnode):
 		self.children.append(self.buf[0]) # while
 		self.children.append(self.buf[1]) # (
 		cond_end = pairmatch(self.buf, 1, '(', ')') 
-		self.children.append(EXPR_node(self.buf[2:cond_end])) # EXPR
+		if cond_end <= 2: # empty EXPR
+			self.children.append(parserError(self.buf[1].row, self.buf[1].col, "expect expression"))
+		else:
+			self.children.append(EXPR_node(self.buf[2:cond_end])) # EXPR
 		self.children.append(self.buf[cond_end]) # )
 		plen, stmt = nextstmt(self.buf[cond_end+1:])
 		self.children.append(stmt) # STMT
@@ -412,14 +442,189 @@ class CPDSTMT_node(ptnode):
 		self.buf = []
 
 class EXPR_node(ptnode):
+	unaryop = {'++', '--', '+', '-', '!', '~'}
+	postfix_unaryop = {'++', '--'}
+	precedence_table = {'=': 0, '+=': 0, '-=': 0, '*=': 0, '/=': 0, '%=': 0, '<<=': 0, '>>=': 0, '&=': 0, '^=': 0, '|=': 0,\
+						'||': 1, '&&': 2, '|': 3, '^': 4, '&': 5,\
+						'==': 6, '!=': 6, '<': 7, '<=': 7, '>': 7, '>=': 7,\
+						'<<': 8, '>>': 8,\
+						'+': 9, '-': 9, '*': 10, '/': 10, '%': 10}
+	assoc_table = {'=': 'r', '+=': 'r', '-=': 'r', '*=': 'r', '/=': 'r', '%=': 'r', '<<=': 'r', '>>=': 'r', '&=': 'r', '^=': 'r', '|=': 'r',\
+						'||': 'l', '&&': 'l', '|': 'l', '^': 'l', '&': 'l',\
+						'==': 'l', '!=': 'l', '<': 'l', '<=': 'l', '>': 'l', '>=': 'l',\
+						'<<': 'l', '>>': 'l',\
+						'+': 'l', '-': 'l', '*': 'l', '/': 'l', '%': 'l'}
+
 	def __init__(self, buf: ['token']):
 		super().__init__('EXPR', buf)
+	
+	# rules: EXPR -> PRIMARY | UNARY | BINARY
+	# PRIMARY -> literal | ACCESS | CALLEXPR | CPDEXPR
+	# CPDEXPR -> ( EXPR )
+	# UNARY -> unaryop EXPR | EXPR unaryop
+	# BINARY -> EXPR binaryop EXPR
+	def expand(self):
+		# precedence climbing
+		def climb(precedence: int, s: int, buf: [token]) -> ('next index', EXPR_node):
+			# peek the first token, if is an operator, it should be a prefix unary operator
+			if buf[s].type == 'op':
+				op = buf[s]
+				if op.value in unary:
+					s += 1
+					# all prefix unary operators are right-associative
+					new_precedence = precedence_table[op]
+					s, rightnode = climb(precedence, s, buf)
+					node = UNARY_node(op, rightnode)
+					return s, node
+				else:
+					return -1, parserError(buf[s].row, buf[s].col, f"'{buf[s].value} cannot be an unary operator'")
+
+			# otherwise it should be a primary
+			s, leftnode = parse_primary(s, buf)
+			if s == -1:
+				return s, leftnode
+			while s < len(buf):
+				# an operator must follow an EXPR
+				# if two primaries are adjacent, there's an error
+				op = buf[s]
+				if op.type != 'op':
+					return -1, parserError(op.row, op.col, 'expect operator')
+
+				# check postfix unary operator
+				# since postfix unary operator has highest precedence, we just need to check continuous ++ and --
+				# postfix unary operators have left associativity
+				while s < len(buf) and buf[s].type == 'op' and buf[s].value in self.postfix_unaryop:
+					leftnode = UNARY_node(leftnode, buf[s])
+					s += 1
+				
+				# check binary operator
+				if s >= len(buf):
+					break
+				op = buf[s]
+				if op.type != 'op':
+					return -1, parserError(op.row, op.col, "expect binary operator")
+
+				# stop if the next operator has lower precedence than the current level
+				# that operator should be parse by a lower precedence climb call
+				if self.precedence_table[op.value] < precedence:
+					break
+
+				# we have an operator has precedence >= current level
+				s += 1
+				new_precedence = self.precedence_table[op.value]
+				if self.assoc_table[op.value] == 'l':
+					new_precedence += 1
+				s, rightnode = climb(new_precedence, s, buf)
+				newnode = BINARY_node(leftnode, op, rightnode)
+				leftnode = newnode
+				if s == -1:
+					return s, newnode
+			return s, leftnode
+
+		# ensure len(buf) > 0 when calling this
+		def parse_primary(s: int, buf: [token]) -> ('next index', 'PRIMARY_node'):
+			if s >= len(buf):
+				return -1, parserError(buf[-1].row, buf[-1].col, "expect expression")
+			# literal
+			if buf[s].type == 'intlit' or buf[s].type == 'chrlit' or buf[s].type == 'strlit':
+				return s+1, buf[s]
+			# CPDEXPR
+			if buf[s].type == 'punc' and buf[s].value == '(':
+				closing_index = pairmatch(buf, s, '(', ')')
+				if closing_index == -1:
+					return -1, parserError(buf[s].row, buf[s].col, "unclosed '('")
+				newnode = CPDEXPR_node(buf[s:closing_index+1])
+				newnode.expand()
+				return closing_index+1, newnode
+			if buf[s].type == 'id':
+			# ACCESS
+				# variable access
+				if s == len(buf) - 1:
+					newnode = ACCESS_node(buf[s:s+1])
+					newnode.expand()
+					return s+1, newnode
+				# array/bit access
+				end = s+1
+				if buf[end].type == 'punc' and buf[end].value == '[':
+					# find continuous pairs of []
+					while end < len(buf) and buf[end].type == 'punc' and buf[end].value == '[':
+						closing_index = findnext(buf, end+1, ']')
+						if closing_index == -1:
+							return -1, parserError(buf[end].row, buf[end].col, "unclosed '['")
+						end = closing_index + 1
+					newnode = ACCESS_node(buf[s:end])
+					newnode.expand()
+					return end, newnode
+			# CALLEXPR
+				elif buf[end].type == 'punc' and buf[end].value == '(':
+					# find consistent pairs of ()
+					end = pairmatch(buf, end, '(', ')')
+					if end == -1:
+						return -1, parserError(buf[end].row, buf[end].col, "unclosed '(")
+					end += 1
+					newnode = CALLEXPR_node(buf[s:end])
+					return end, newnode
+			# ACCESS
+				else:
+					newnode = ACCESS_node(buf[s:end])
+					newnode.expand()
+					return end, newnode
+			# error
+			return -1, parserError(buf[s].row, buf[s].col, "expect identifier for primary expression")
+
+		ni, node = climb(0, 0, self.buf)
+		self.children.append(node)
+		self.buf = []
+
+class CPDEXPR_node(ptnode):
+	# buf will look like ( ... )
+	def __init__(self, buf: ['token']):
+		super().__init__('CPDEXPR', buf)
+	
+	def expand(self):
+		self.children.append(self.buf[0]) # (
+		if len(self.buf) <= 2: # empty EXPR
+			self.children.append(parserError(self.buf[0].row, self.buf[0].col, "expect expression"))
+		else:
+			newnode = EXPR_node(self.buf[1:-1])
+			newnode.expand()
+			self.children.append(newnode)# EXPR
+			self.children.append(self.buf[-1]) # )
+			self.buf = []
+
+class ACCESS_node(ptnode):
+	# buf will look like id with arbitrary pairs of [ ... ]
+	def __init__(self, buf: ['token']):
+		super().__init__('ACCESS', buf)
+
+	# rule: ACCESS -> id | ACCESS [ EXPR ]
+	def expand(self):
+		pass # TODO
+
+class CALLEXPR_node(ptnode):
+	def __init__(self, buf: ['token']):
+		super().__init__('CALLEXPR', buf)
+
+	def expand(self):
+		pass # TODO
+
+class UNARY_node(ptnode):
+	def __init__(self, left: 'op/EXPR_node', right: 'op/EXPR_node'):
+		super().__init__('UNARY', [])
+
+class BINARY_node(ptnode):
+	def __init__(self, left: EXPR_node, op: 'op', right: EXPR_node):
+		super().__init__('BINARY', [])
 
 class parser():
 	def run(self, buf: [token]) -> (parserError, S_node):
 		def parse_dfs(node: ptnode) -> parserError:
 			#print('dfs expanding ' + str(node))
 			node.expand()
+			# do not further expand EXPR_node recursively, since its expand function is already recursive
+			if type(node) == EXPR_node:
+				return None
+
 			for child in node.children:
 				if type(child) == parserError:
 					return child

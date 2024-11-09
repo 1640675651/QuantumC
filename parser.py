@@ -49,12 +49,9 @@ class ptnode(): # parse tree node
 	def __init__(self, name: 'str', buf: ['token']):
 		self.name = name
 		self.buf = buf
-		#self.isterminal = isterminal
 		self.children = []
-		# can mark buf start and end index [start, end)
-		# to avoid copying buf when expanding
-		# self.bufstart = bufstart
-		# self.bufend = bufend
+		self.expanded = False
+
 	def expand(self):
 		pass
 
@@ -194,6 +191,7 @@ class S_node(ptnode):
 	def expand(self):
 		newnode = DECLLIST_node(self.buf)
 		self.children.append(newnode)
+		self.expanded = True
 
 class DECLLIST_node(ptnode):
 	def __init__(self, buf: ['token']):
@@ -212,6 +210,7 @@ class DECLLIST_node(ptnode):
 				break
 			else:
 				self.buf = self.buf[plen:]
+		self.expanded = True
 
 class VARDECL_node(ptnode):
 	# buf will look like TYPE id ; or TYPE id = ... ;
@@ -223,6 +222,7 @@ class VARDECL_node(ptnode):
 	# can combine the rules:
 	# VARINIT -> TYPE id ; | TYPE id = EXPR ;
 	def expand(self):
+		self.expanded = True
 		# TYPE, id, and ; are checked by the DECLLIST expansion
 		# just add the terminals to children
 		self.children.append(self.buf[0]) # TYPE
@@ -248,7 +248,7 @@ class ARRDECL_node(ptnode):
 		super().__init__('ARRDECL', buf)
 	
 	def expand(self):
-		pass # TODO
+		self.expanded = True # TODO
 
 class FUNCDECL_node(ptnode):
 	# buf will look like TYPE id ( ... {...}
@@ -257,6 +257,7 @@ class FUNCDECL_node(ptnode):
 	
 	# rule: FUNCDECL -> TYPE id (PARAMLIST) {STMTLIST}
 	def expand(self):
+		self.expanded = True
 		# TYPE, id, and ; are checked by the DECLLIST expansion
 		# just add the terminals to children
 		self.children.append(self.buf[0]) # TYPE
@@ -292,6 +293,7 @@ class PARAMLIST_node(ptnode):
 	
 	# rule: PARAMLIST -> TYPE id, PARAMLIST | TYPE id | epsilon
 	def expand(self):
+		self.expanded = True
 		for i in range(0, len(self.buf), 3):
 			if not istype(self.buf[i]):
 				self.children.append(parserError(self.buf[i].row, self.buf[i].col, 'expect type for parameter'))
@@ -320,6 +322,7 @@ class STMTLIST_node(ptnode):
 	# JMP -> break; | continue ; | RETURN
 	# RETURN -> return ; | return EXPR ;
 	def expand(self):
+		self.expanded = True
 		while len(self.buf):
 			plen, newnode = nextstmt(self.buf)
 			self.children.append(newnode)
@@ -337,6 +340,7 @@ class JMP_node(ptnode):
 
 	# rules: JMP -> break ; | continue ; | return EXPR ;
 	def expand(self):
+		self.expanded = True
 		self.children.append(self.buf[0]) # break/continue/return
 		if len(self.buf) > 2:
 			self.children.append(EXPR_node(self.buf[1:-1])) # EXPR
@@ -350,6 +354,7 @@ class EXPRSTMT_node(ptnode):
 	
 	# rule: EXPRSTMT -> EXPR ;
 	def expand(self):
+		self.expanded = True
 		if len(self.buf) <= 1:
 			self.children.append(parserError(self.buf[0].row, self.buf[1].col, "expect expression"))
 		else:
@@ -364,8 +369,7 @@ class IFELSE_node(ptnode):
 		super().__init__('IFELSE', buf)
 	
 	def expand(self):
-		print('expanding ifelse')
-		print(self.buf)
+		self.expanded = True
 		self.children.append(self.buf[0]) # if
 		self.children.append(self.buf[1]) # (
 		cond_end = pairmatch(self.buf, 1, '(', ')') 
@@ -391,6 +395,7 @@ class FOR_node(ptnode):
 	
 	# rule: FOR -> for ( FOREXPR ) STMT
 	def expand(self):
+		self.expanded = True
 		self.children.append(self.buf[0]) # for
 		self.children.append(self.buf[1]) # (
 		cond_end = pairmatch(self.buf, 1, '(', ')') 
@@ -408,7 +413,7 @@ class FOREXPR_node(ptnode):
 		super().__init__('FOREXPR', buf)
 	
 	def expand(self):
-		pass
+		self.expanded = True # TODO
 
 class WHILE_node(ptnode):
 	# buf will look like while ( ... ) STMT
@@ -417,6 +422,7 @@ class WHILE_node(ptnode):
 
 	# rule: WHILE -> while ( EXPR ) STMT
 	def expand(self):
+		self.expanded = True
 		self.children.append(self.buf[0]) # while
 		self.children.append(self.buf[1]) # (
 		cond_end = pairmatch(self.buf, 1, '(', ')') 
@@ -436,6 +442,7 @@ class CPDSTMT_node(ptnode):
 	
 	# rule: CPDSTMT -> { STMTLIST }
 	def expand(self):
+		self.expanded = True
 		self.children.append(self.buf[0]) # {
 		self.children.append(STMTLIST_node(self.buf[1:-1])) # STMTLIST
 		self.children.append(self.buf[-1]) # }
@@ -463,7 +470,7 @@ class EXPR_node(ptnode):
 	# CPDEXPR -> ( EXPR )
 	# UNARY -> unaryop EXPR | EXPR unaryop
 	# BINARY -> EXPR binaryop EXPR
-	def expand(self):
+	def expand(self): 
 		# precedence climbing
 		def climb(precedence: int, s: int, buf: [token]) -> ('next index', EXPR_node):
 			# peek the first token, if is an operator, it should be a prefix unary operator
@@ -511,6 +518,8 @@ class EXPR_node(ptnode):
 
 				# we have an operator has precedence >= current level
 				s += 1
+				if s >= len(buf):
+					return -1, parserError(buf[-1].row, buf[-1].col, "expect expression")
 				new_precedence = self.precedence_table[op.value]
 				if self.assoc_table[op.value] == 'l':
 					new_precedence += 1
@@ -572,6 +581,7 @@ class EXPR_node(ptnode):
 			# error
 			return -1, parserError(buf[s].row, buf[s].col, "expect identifier for primary expression")
 
+		self.expanded = True
 		ni, node = climb(0, 0, self.buf)
 		self.children.append(node)
 		self.buf = []
@@ -582,6 +592,7 @@ class CPDEXPR_node(ptnode):
 		super().__init__('CPDEXPR', buf)
 	
 	def expand(self):
+		self.expanded = True
 		self.children.append(self.buf[0]) # (
 		if len(self.buf) <= 2: # empty EXPR
 			self.children.append(parserError(self.buf[0].row, self.buf[0].col, "expect expression"))
@@ -599,32 +610,36 @@ class ACCESS_node(ptnode):
 
 	# rule: ACCESS -> id | ACCESS [ EXPR ]
 	def expand(self):
-		pass # TODO
+		self.expanded = True # TODO
 
 class CALLEXPR_node(ptnode):
 	def __init__(self, buf: ['token']):
 		super().__init__('CALLEXPR', buf)
 
 	def expand(self):
-		pass # TODO
+		self.expanded = True # TODO
 
 class UNARY_node(ptnode):
 	def __init__(self, left: 'op/EXPR_node', right: 'op/EXPR_node'):
 		super().__init__('UNARY', [])
+		self.children.append(left)
+		self.children.append(right)
+		self.expanded = True
 
 class BINARY_node(ptnode):
 	def __init__(self, left: EXPR_node, op: 'op', right: EXPR_node):
 		super().__init__('BINARY', [])
+		self.children.append(left)
+		self.children.append(op)
+		self.children.append(right)
+		self.expanded = True
 
 class parser():
 	def run(self, buf: [token]) -> (parserError, S_node):
 		def parse_dfs(node: ptnode) -> parserError:
-			#print('dfs expanding ' + str(node))
-			node.expand()
 			# do not further expand EXPR_node recursively, since its expand function is already recursive
-			if type(node) == EXPR_node:
-				return None
-
+			if node.expanded == False:
+				node.expand()
 			for child in node.children:
 				if type(child) == parserError:
 					return child

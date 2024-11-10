@@ -282,16 +282,16 @@ class VARDECL_node(ptnode):
 		self.children.append(self.buf[0]) # TYPE
 		self.children.append(self.buf[1]) # id
 		if len(self.buf) == 3: # no VARINIT
-			self.children.append(self.buf[2]) # ;
+			#self.children.append(self.buf[2]) # ;
 			self.buf = [] # clear buf to save memory
 			return
-		if self.buf[2].value == '=': # has VARINIT
-			self.children.append(self.buf[2]) # =
+		if self.buf[2].type == 'op' and self.buf[2].value == '=': # has VARINIT
+			#self.children.append(self.buf[2]) # =
 			if len(self.buf) < 5:
 				self.children.append(parserError(self.buf[2].row, self.buf[2].col, "expect expression"))
 			else:
 				self.children.append(EXPR_node(self.buf[3:-1]))
-			self.children.append(self.buf[-1]) # ;
+			#self.children.append(self.buf[-1]) # ;
 			self.buf = []
 		else: # expected = to init a variable
 			self.children.append(parserError(self.buf[2].row, self.buf[2].col, "expect '=' for variable initialization"))
@@ -314,19 +314,19 @@ class ARRDECL_node(ptnode):
 		
 		# no array initializer
 		if closing_index == len(self.buf) - 1:
-			self.children.append(self.buf[-1]) # ;
+			#self.children.append(self.buf[-1]) # ;
 			self.buf = []
 			return
 		# has = after array dimension
 		if self.buf[closing_index].type == 'op' and self.buf[closing_index].value == '=':
-			self.children.append(self.buf[closing_index]) # =
+			#self.children.append(self.buf[closing_index]) # =
 			# nothing after =
 			if closing_index == len(self.buf) - 2:
 				self.children.append(parserError(self.buf[closing_index].row, self.buf[closing_index].col, "expect array initializer"))
 				return
 			# has initializer
 			self.children.append(ARRLIT_node(self.buf[closing_index+1:-1])) # ARRLIT
-			self.children.append(self.buf[-1]) # ;
+			#self.children.append(self.buf[-1]) # ;
 			self.buf = []
 			return
 		else:
@@ -346,10 +346,10 @@ class ARRDIM_node(ptnode):
 		right = 0
 		while right < len(self.buf) - 1:
 			right = findnext(self.buf, left, ']')
-			self.children.append(self.buf[left]) # [
+			#self.children.append(self.buf[left]) # [
 			if right > left + 1: 
 				self.children.append(EXPR_node(self.buf[left+1:right])) # EXPR
-			self.children.append(self.buf[right]) # ]
+			#self.children.append(self.buf[right]) # ]
 			left = right + 1
 		self.buf = []
 
@@ -364,13 +364,13 @@ class ARRLIT_node(ptnode):
 		if not (self.buf[0].type == 'punc' and self.buf[0].value == '{'):
 			self.children.append(self.buf[0].row, self.buf[0].col, "expect '{' for array initializer")
 			return
-		self.children.append(self.buf[0]) # {
+		#self.children.append(self.buf[0]) # {
 		if not (self.buf[-1].type == 'punc' and self.buf[-1].value == '}'):
 			self.children.append(parserError(self.buf[-1].row, self.buf[-1].col, "expect '}' for array initializer"))
 			return
 		if len(self.buf) > 2:
 			self.children.append(INITLIST_node(self.buf[1:-1])) # INITLIST
-		self.children.append(self.buf[-1]) # }
+		#self.children.append(self.buf[-1]) # }
 		self.buf = []
 
 class INITLIST_node(ptnode):
@@ -378,7 +378,7 @@ class INITLIST_node(ptnode):
 	def __init__(self, buf: [token]):
 		super().__init__('INITLIST', buf)
 
-	# rules: INITLIST -> INIT , INITLIST | INIT
+	# rules: INITLIST -> INIT , INITLIST | epsilon
 	# INIT -> EXPR | ARRLIT
 	def expand(self):
 		self.expanded = True
@@ -387,24 +387,10 @@ class INITLIST_node(ptnode):
 			self.children.append(newnode)
 			if plen == -1:
 				return
-			if plen < len(self.buf):
-				self.children.append(self.buf[plen]) # ,
+			#if plen < len(self.buf):
+			#	self.children.append(self.buf[plen]) # ,
 			self.buf = self.buf[plen+1:]
 		self.buf = []
-
-# class INIT_node(ptnode):
-# 	# buf can look like anything non empty
-# 	def __init__(self, buf: [token]):
-# 		super().__init__('INIT', buf)
-	
-# 	# rule: INIT -> EXPR | ARRLIT
-# 	def expand(self):
-# 		self.expanded = True
-# 		if self.buf[0].type == 'punc' and self.buf[0].value == '{':
-# 			self.children.append(ARRLIT_node(self.buf))
-# 		else:
-# 			self.children.append(EXPR_node(self.buf))
-# 		self.buf = []
 	
 class FUNCDECL_node(ptnode):
 	# buf will look like TYPE id ( ... {...}
@@ -428,18 +414,18 @@ class FUNCDECL_node(ptnode):
 		if end == -1:
 			self.children.append(parserError(self.buf[2].row, self.buf[2].col, "unclosed '(' "))
 			return
-		self.children.append(self.buf[2]) # (
+		#self.children.append(self.buf[2]) # (
 		self.children.append(PARAMLIST_node(self.buf[3:end])) # PARAMLIST
-		self.children.append(self.buf[end]) # )
+		#self.children.append(self.buf[end]) # )
 		
 		# the token immediately after ) should be {}
 		if end+1 == len(self.buf) or self.buf[end+1].value != '{':
 			self.children.append(parseError(self.buf[end].row, self.buf[end].col, "expected '{' for function body"))
 
 		# the expansion of DECLLIST guarantees the buf ends with a consistent pair of {}
-		self.children.append(self.buf[end+1]) # {
+		#self.children.append(self.buf[end+1]) # {
 		self.children.append(STMTLIST_node(self.buf[end+2:-1])) # STMTLIST
-		self.children.append(self.buf[-1]) # }
+		#self.children.append(self.buf[-1]) # }
 		self.buf = []
 
 class PARAMLIST_node(ptnode):
@@ -464,7 +450,7 @@ class PARAMLIST_node(ptnode):
 			if self.buf[i+2].value != ',':
 				self.children.append(parserError(self.buf[i+2].row, self.buf[i+2].col, "expect ',' to split parameters"))
 				break
-			self.children.append(self.buf[i+2]) # ,
+			#self.children.append(self.buf[i+2]) # ,
 		self.buf = []
 
 class STMTLIST_node(ptnode):
@@ -500,7 +486,7 @@ class JMP_node(ptnode):
 		self.children.append(self.buf[0]) # break/continue/return
 		if len(self.buf) > 2:
 			self.children.append(EXPR_node(self.buf[1:-1])) # EXPR
-		self.children.append(self.buf[-1]) # ;
+		#self.children.append(self.buf[-1]) # ;
 		self.buf = []
 
 class EXPRSTMT_node(ptnode):
@@ -515,7 +501,7 @@ class EXPRSTMT_node(ptnode):
 			self.children.append(parserError(self.buf[0].row, self.buf[1].col, "expect expression"))
 		else:
 			self.children.append(EXPR_node(self.buf[:-1])) # EXPR 
-			self.children.append(self.buf[-1]) # ;
+			#self.children.append(self.buf[-1]) # ;
 			self.buf = []
 
 class IFELSE_node(ptnode):
@@ -526,20 +512,20 @@ class IFELSE_node(ptnode):
 	
 	def expand(self):
 		self.expanded = True
-		self.children.append(self.buf[0]) # if
-		self.children.append(self.buf[1]) # (
+		#self.children.append(self.buf[0]) # if
+		#self.children.append(self.buf[1]) # (
 		cond_end = pairmatch(self.buf, 1, '(', ')') 
 		if cond_end <= 2: # empty EXPR
 			self.children.append(parserError(self.buf[1].row, self.buf[1].col, "expect expression"))
 		else:
 			self.children.append(EXPR_node(self.buf[2:cond_end])) # EXPR
-		self.children.append(self.buf[cond_end]) # )
+		#self.children.append(self.buf[cond_end]) # )
 		plen, stmt = nextstmt(self.buf[cond_end+1:])
 		self.children.append(stmt) # STMT1
 
 		plen = cond_end + 1 + plen
 		if plen < len(self.buf):
-			self.children.append(self.buf[plen])# else
+			#self.children.append(self.buf[plen])# else
 			plen1, stmt = nextstmt(self.buf[plen+1:])
 			self.children.append(stmt)
 		self.buf = []
@@ -552,14 +538,14 @@ class FOR_node(ptnode):
 	# rule: FOR -> for ( FOREXPR ) STMT
 	def expand(self):
 		self.expanded = True
-		self.children.append(self.buf[0]) # for
-		self.children.append(self.buf[1]) # (
+		#self.children.append(self.buf[0]) # for
+		#self.children.append(self.buf[1]) # (
 		cond_end = pairmatch(self.buf, 1, '(', ')') 
 		if cond_end <= 2: # empty FOREXPR
 			self.children.append(parserError(self.buf[1].row, self.buf[1].col, "expect for loop expression"))
 		else:
 			self.children.append(FOREXPR_node(self.buf[2:cond_end])) # FOREXPR
-		self.children.append(self.buf[cond_end]) # )
+		#self.children.append(self.buf[cond_end]) # )
 		plen, stmt = nextstmt(self.buf[cond_end+1:])
 		self.children.append(stmt) # STMT
 		self.buf = []
@@ -584,7 +570,7 @@ class FOREXPR_node(ptnode):
 		left = 0
 		for i in semicol_indices:
 			self.children.append(FORSUBEXPR_node(self.buf[left:i])) # FORSUBEXPR
-			self.children.append(self.buf[i]) # ;
+			#self.children.append(self.buf[i]) # ;
 			left = i+1
 		self.children.append(FORSUBEXPR_node(self.buf[left:])) # FORSUBEXPR
 		self.buf = []
@@ -610,14 +596,14 @@ class WHILE_node(ptnode):
 	# rule: WHILE -> while ( EXPR ) STMT
 	def expand(self):
 		self.expanded = True
-		self.children.append(self.buf[0]) # while
-		self.children.append(self.buf[1]) # (
+		#self.children.append(self.buf[0]) # while
+		#self.children.append(self.buf[1]) # (
 		cond_end = pairmatch(self.buf, 1, '(', ')') 
 		if cond_end <= 2: # empty EXPR
 			self.children.append(parserError(self.buf[1].row, self.buf[1].col, "expect expression"))
 		else:
 			self.children.append(EXPR_node(self.buf[2:cond_end])) # EXPR
-		self.children.append(self.buf[cond_end]) # )
+		#self.children.append(self.buf[cond_end]) # )
 		plen, stmt = nextstmt(self.buf[cond_end+1:])
 		self.children.append(stmt) # STMT
 		self.buf = []
@@ -630,9 +616,9 @@ class CPDSTMT_node(ptnode):
 	# rule: CPDSTMT -> { STMTLIST }
 	def expand(self):
 		self.expanded = True
-		self.children.append(self.buf[0]) # {
+		#self.children.append(self.buf[0]) # {
 		self.children.append(STMTLIST_node(self.buf[1:-1])) # STMTLIST
-		self.children.append(self.buf[-1]) # }
+		#self.children.append(self.buf[-1]) # }
 		self.buf = []
 
 class EXPR_node(ptnode):
@@ -778,14 +764,14 @@ class CPDEXPR_node(ptnode):
 	
 	def expand(self):
 		self.expanded = True
-		self.children.append(self.buf[0]) # (
+		#self.children.append(self.buf[0]) # (
 		if len(self.buf) <= 2: # empty EXPR
 			self.children.append(parserError(self.buf[0].row, self.buf[0].col, "expect expression"))
 		else:
 			newnode = EXPR_node(self.buf[1:-1])
 			newnode.expand()
 			self.children.append(newnode)# EXPR
-			self.children.append(self.buf[-1]) # )
+			#self.children.append(self.buf[-1]) # )
 			self.buf = []
 
 class ACCESS_node(ptnode):
@@ -801,12 +787,12 @@ class ACCESS_node(ptnode):
 		right = 1
 		while right < len(self.buf) - 1:
 			right = pairmatch(self.buf, left, '[', ']')
-			self.children.append(self.buf[left]) # [
+			#self.children.append(self.buf[left]) # [
 			if right - left == 1:
 				self.children.append(parserError(self.buf[left].row. self.buf[left].col, "expect expression"))
 				return
 			self.children.append(EXPR_node(self.buf[left+1:right]))
-			self.children.append(self.buf[right]) # [
+			#self.children.append(self.buf[right]) # [
 			left = right+1
 
 class CALLEXPR_node(ptnode):
@@ -818,9 +804,9 @@ class CALLEXPR_node(ptnode):
 	def expand(self):
 		self.expanded = True
 		self.children.append(self.buf[0]) # id
-		self.children.append(self.buf[1]) # (
+		#self.children.append(self.buf[1]) # (
 		self.children.append(ARGLIST_node(self.buf[2:-1])) # ARGLIST
-		self.children.append(self.buf[-1]) # )
+		#self.children.append(self.buf[-1]) # )
 		self.buf = []
 
 class ARGLIST_node(ptnode):
@@ -852,7 +838,7 @@ class ARGLIST_node(ptnode):
 				return
 
 			self.children.append(EXPR_node(self.buf[expr_start:expr_end])) # EXPR
-			self.children.append(self.buf[expr_end]) # ,
+			#self.children.append(self.buf[expr_end]) # ,
 			expr_start = expr_end + 1
 			expr_end, err = findnext_unnested(self.buf, expr_start, ',')
 		

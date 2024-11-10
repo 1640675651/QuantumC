@@ -1,0 +1,7 @@
+// test complex expression with operator precedence
+int8 main()
+{
+	int8 i = 0;
+	int8 j = 1;
+	i += 1+2*(3+4)+j++<<5;
+}

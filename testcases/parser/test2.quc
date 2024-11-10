@@ -1,6 +1,7 @@
-// test function call and global variable
+// test function call and array access
 int16 global_var = 0;
-int16 global_arr[10];
+int16 global_arr1[2][2] = {{0, 1}, {2, 3}};
+int16 global_arr2[5] = {1+1,2*2,3,4,5,};
 
 int8 add(int8 a, int8 b)
 {
@@ -9,8 +10,13 @@ int8 add(int8 a, int8 b)
 
 int16 main()
 {
-	int8 a = 1;
-	int8 b = 2;
-	global_var = add(a, b);
+	// array initializer with function call
+	int8 local_arr[2] = {add(1, 2), add(3, 4)};
+	// array access
+	global_arr1[1][1] = local_arr2[1];
+	// nested array subscription with function call
+	global_arr1[0][0] = global_arr2[add(global_arr2[0], global_arr2[0])];
+	// nested function call
+	global_var = add(add(global_arr2[0], global_arr2[0]), global_arr1[1][1]);
 	print(global_var);
 }

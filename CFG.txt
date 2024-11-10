@@ -1,0 +1,126 @@
+Definition of non-terminals:
+S: start
+DECLLIST: declaration list
+VARDECL: variable declaration
+
+ARRDECL: array declaration
+ARRDIM: array dimension
+ARRLIT: array literal (array initializer)
+INITLIST: initializer list
+INIT: initializer
+
+FUNCDECL: function declaration
+PARAMLIST: parameter list
+
+STMTLIST: statement list
+STMT: statement
+EXPRSTMT: expression statement (expression with ;)
+CPDSTMT: compound statement
+IFELSE: if else statement
+FOR: for statement
+WHILE: while statement
+JMP: jump statement
+RETURN: return statement
+
+EXPR: expression
+PRIMARY: primary expression (basic term)
+UNARY: unary expression
+BINARY: binary expression
+CALLEXPR: call expression
+ARGLIST: argument list
+ACCESS: variable/array access
+CPDEXPR: compound expression
+
+Rules:
+S -> DECLLIST
+
+DECLLIST -> VARDECL DECLLIST |
+            ARRDECL DECLLIST |
+            FUNCDECL DECLLIST |
+            epsilon
+
+VARDECL -> type id ; |
+        type id = EXPR;
+
+Array related:
+ARRDECL -> type id ARRDIM ;|
+           type id ARRDIM = ARRLIT;
+
+ARRDIM -> [ EXPR ] ARRDIM |
+          EXPR
+
+ARRLIT -> {INITLIST} | 
+          {}
+
+INITLIST -> INIT, INITLIST | 
+            INIT
+
+INIT -> EXPR | 
+        ARRLIT
+
+Function related:
+FUNCDECL -> type id (PARAMLIST) {STMTLIST}
+
+PARAMLIST -> type id, PARAMLIST |
+             type id |
+             epsilon
+
+STMTLIST -> STMT STMTLIST |
+            epsilon
+
+STMT -> VARDECL |
+        ARRDECL |
+        CPDSTMT |
+        EXPRSTMT |
+        IFELSE |
+        FOR |
+        WHILE |
+        JMP |
+        ;
+
+CPDSTMT -> { STMTLIST }
+
+EXPRSTMT -> EXPR ;
+
+IFELSE -> if ( EXPR ) STMT |
+          if ( EXPR ) STMT else STMT
+
+FOR -> for ( FOREXPR ) STMT
+
+FOREXPR -> FORSUBEXPR ; FORSUBEXPR ; FORSUBEXPR
+
+FORSUBEXPR -> EXPR |
+              epsilon
+            
+WHILE -> while ( EXPR ) STMT
+
+JMP -> break ; |
+       continue ; |
+       RETURN ;
+
+RETURN -> return ; |
+          return EXPR ;
+
+Expression related:
+EXPR -> PRIMARY |
+        UNARY |
+        BINARY
+
+PRIMARY -> literal |
+           ACCESS |
+           CALLEXPR |
+           CPDEXPR
+
+UNARY -> unaryop EXPR |
+         EXPR unaryop
+
+BINARY -> EXPR binaryop EXPR
+
+CALLEXPR -> id ( ARGLIST )
+
+ARGLIST -> EXPR, ARGLIST |
+           EXPR |
+           epsilon
+
+ACCESS -> ACCESS [ EXPR ] |
+          id

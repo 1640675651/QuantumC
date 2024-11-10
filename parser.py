@@ -17,24 +17,45 @@ def isjmp(t: token) -> bool:
 	jmpops = ['break', 'continue', 'return']
 	return t.type == 'kw' and t.value in jmpops
 
-# find consistent pairing structure (like parentheses) nearest to the right of starting index s
+# find consistent pairing structure (like nested parentheses) nearest to the right of starting index s
 # return the index of the last closing token
 def pairmatch(buf: [token], s: int, t1: str, t2: str) -> int:
 	stack = 0
 	for i in range(s, len(buf), 1):
-		if buf[i].value == t1:
-			stack += 1
-		elif buf[i].value == t2:
-			stack -= 1
-			if stack == 0:
-				return i
+		if buf[i].type == 'punc':
+			if buf[i].value == t1:
+				stack += 1
+			elif buf[i].value == t2:
+				stack -= 1
+				if stack == 0:
+					return i
 	return -1
 
 def findnext(buf: [token], s: int, t: str) -> int:
 	for i in range(s, len(buf), 1):
-		if buf[i].value == t:
+		if buf[i].type == 'punc' and buf[i].value == t:
 			return i
 	return -1
+
+# buf[s] should be [
+# return the index of the last ] + 1
+def findarrsub(buf: [token], s: int) -> int:
+	# find continuous pairs of []
+	end = s
+	while end < len(buf) and buf[end].type == 'punc' and buf[end].value == '[':
+		#closing_index = findnext(buf, end+1, ']')
+		closing_index = pairmatch(buf, end, '[' , ']')
+		if closing_index == -1:
+			return -1
+		end = closing_index + 1
+	return end
+
+def findtokens(buf: [token], t: str) -> [int]:
+	ret = []
+	for i in range(len(buf)):
+		if buf[i].type == 'punc' and buf[i].value == t:
+			ret.append(i)
+	return ret
 
 class parserError():
 	def __init__(self, row: int, col: int, info: str):
@@ -183,6 +204,21 @@ def nextstmt(buf) -> ('parsed len', ptnode):
 		return nextindex+1, JMP_node(buf[:nextindex+1])
 	return nextindex+1, EXPRSTMT_node(buf[:nextindex+1])
 
+def nextinit(buf) -> ('parsed len', ptnode):
+	# ARRLIT
+	if buf[0].type == 'punc' and buf[0].value == '{':
+		end = pairmatch(buf, 0, '{', '}')
+		if end == -1:
+			return -1, parserError(buf[0].row, buf[0].col, "unclosed '{'")
+		return end+1, ARRLIT_node(buf[:end+1])
+	# EXPR, advance to the next comma
+	end = findnext(buf, 0, ',')
+	if end == -1:
+		return len(buf), EXPR_node(buf)
+	if end == 0:
+		return -1, parserError(buf[0].row, buf[0].col, "expect initializer")
+	return end, EXPR_node(buf[:end]) # not including comma
+
 class S_node(ptnode):
 	def __init__(self, buf: ['token']):
 		super().__init__('S', buf)
@@ -247,12 +283,114 @@ class ARRDECL_node(ptnode):
 	def __init__(self, buf: ['token']):
 		super().__init__('ARRDECL', buf)
 	
+	# rule: ARRDECL -> TYPE id ARRDIM ; | TYPE id ARRDIM = ARRLIT ;
 	def expand(self):
-		self.expanded = True # TODO
+		self.expanded = True
+		self.children.append(self.buf[0]) # TYPE
+		self.children.append(self.buf[1]) # id
+		closing_index = findarrsub(self.buf, 2)
+		if closing_index == -1:
+			self.children.append(parserError(self.buf[2].row, self.buf[2].col, "unclosed '['"))
+			return 
+		self.children.append(ARRDIM_node(self.buf[2:closing_index])) # ARRDIM
+		
+		# no array initializer
+		if closing_index == len(self.buf) - 1:
+			self.children.append(self.buf[-1]) # ;
+			self.buf = []
+			return
+		# has = after array dimension
+		if self.buf[closing_index].type == 'op' and self.buf[closing_index].value == '=':
+			self.children.append(self.buf[closing_index]) # =
+			# nothing after =
+			if closing_index == len(self.buf) - 2:
+				self.children.append(parserError(self.buf[closing_index].row, self.buf[closing_index].col, "expect array initializer"))
+				return
+			# has initializer
+			self.children.append(ARRLIT_node(self.buf[closing_index+1:-1])) # ARRLIT
+			self.children.append(self.buf[-1]) # ;
+			self.buf = []
+			return
+		else:
+			self.children.append(parserError(self.buf[closing_index].row, self.buf[closing_index].col, "expect '=' for array initializer"))
+			return
 
+class ARRDIM_node(ptnode):
+	# buf will look like arbitrary number of [ ... ]
+	def __init__(self, buf: [token]):
+		super().__init__('ARRDIM', buf)
+	
+	# rule: ARRDIM -> [ EXPR ] ARRDIM | [ ] ARRDIM | [ EXPR ] | [ ]
+	# not allowing empty dimension for now
+	def expand(self): 
+		self.expanded = True
+		left = 0
+		right = 0
+		while right < len(self.buf) - 1:
+			right = findnext(self.buf, left, ']')
+			self.children.append(self.buf[left]) # [
+			if right > left + 1: 
+				self.children.append(EXPR_node(self.buf[left+1:right])) # EXPR
+			self.children.append(self.buf[right]) # ]
+			left = right + 1
+		self.buf = []
+
+class ARRLIT_node(ptnode):
+	# buf can look like anything non empty
+	def __init__(self, buf: [token]):
+		super().__init__('ARRLIT', buf)
+
+	# rule: ARRLIT -> { } | { INITLIST }
+	def expand(self): 
+		self.expanded = True
+		if not (self.buf[0].type == 'punc' and self.buf[0].value == '{'):
+			self.children.append(self.buf[0].row, self.buf[0].col, "expect '{' for array initializer")
+			return
+		self.children.append(self.buf[0]) # {
+		if not (self.buf[-1].type == 'punc' and self.buf[-1].value == '}'):
+			self.children.append(parserError(self.buf[-1].row, self.buf[-1].col, "expect '}' for array initializer"))
+			return
+		if len(self.buf) > 2:
+			self.children.append(INITLIST_node(self.buf[1:-1])) # INITLIST
+		self.children.append(self.buf[-1]) # }
+		self.buf = []
+
+class INITLIST_node(ptnode):
+	# buf can look like anything non empty
+	def __init__(self, buf: [token]):
+		super().__init__('INITLIST', buf)
+
+	# rules: INITLIST -> INIT , INITLIST | INIT
+	# INIT -> EXPR | ARRLIT
+	def expand(self):
+		self.expanded = True
+		while len(self.buf) > 0:
+			plen, newnode = nextinit(self.buf)
+			self.children.append(newnode)
+			if plen == -1:
+				return
+			if plen < len(self.buf):
+				self.children.append(self.buf[plen]) # ,
+			self.buf = self.buf[plen+1:]
+		self.buf = []
+
+# class INIT_node(ptnode):
+# 	# buf can look like anything non empty
+# 	def __init__(self, buf: [token]):
+# 		super().__init__('INIT', buf)
+	
+# 	# rule: INIT -> EXPR | ARRLIT
+# 	def expand(self):
+# 		self.expanded = True
+# 		if self.buf[0].type == 'punc' and self.buf[0].value == '{':
+# 			self.children.append(ARRLIT_node(self.buf))
+# 		else:
+# 			self.children.append(EXPR_node(self.buf))
+# 		self.buf = []
+	
 class FUNCDECL_node(ptnode):
 	# buf will look like TYPE id ( ... {...}
-	def __init__(self, buf: ['token']):
+	def __init__(self, buf: [token]):
 		super().__init__('FUNCDECL', buf)
 	
 	# rule: FUNCDECL -> TYPE id (PARAMLIST) {STMTLIST}
@@ -409,15 +547,46 @@ class FOR_node(ptnode):
 		self.buf = []
 
 class FOREXPR_node(ptnode):
+	# buf can be anything non empty
 	def __init__(self, buf: ['token']):
 		super().__init__('FOREXPR', buf)
 	
+	# rule: FOREXPR -> FORSUBEXPR ; FORSUBEXPR ; FORSUBEXPR
 	def expand(self):
-		self.expanded = True # TODO
+		self.expanded = True 
+		semicol_indices = findtokens(self.buf, ';')
+		if len(semicol_indices) < 2:
+			self.children.append(parserError(self.buf[-1].row, self.buf[-1].col, "expect ';' in for statement"))
+			return
+		if len(semicol_indices) > 2:
+			i = semicol_indices[2]
+			self.children.append(parserError(self.buf[i].row, self.buf[i].col, "unexpected ';' in for statement"))
+			return
+
+		left = 0
+		for i in semicol_indices:
+			self.children.append(FORSUBEXPR_node(self.buf[left:i])) # FORSUBEXPR
+			self.children.append(self.buf[i]) # ;
+			left = i+1
+		self.children.append(FORSUBEXPR_node(self.buf[left:])) # FORSUBEXPR
+		self.buf = []
+
+class FORSUBEXPR_node(ptnode):
+	# buf can be anything including empty list
+	def __init__(self, buf: [token]):
+		super().__init__('FORSUBEXPR', buf)
+	
+	# rule: FORSUBEXPR -> EXPR | epsilon
+	def expand(self):
+		self.expanded = True
+		if len(self.buf) == 0:
+			return
+		self.children.append(EXPR_node(self.buf[:]))
+		self.buf = []
 
 class WHILE_node(ptnode):
 	# buf will look like while ( ... ) STMT
-	def __init__(self, buf: ['token']):
+	def __init__(self, buf: [token]):
 		super().__init__('WHILE', buf)
 
 	# rule: WHILE -> while ( EXPR ) STMT
@@ -556,11 +725,9 @@ class EXPR_node(ptnode):
 				end = s+1
 				if buf[end].type == 'punc' and buf[end].value == '[':
 					# find continuous pairs of []
-					while end < len(buf) and buf[end].type == 'punc' and buf[end].value == '[':
-						closing_index = findnext(buf, end+1, ']')
-						if closing_index == -1:
-							return -1, parserError(buf[end].row, buf[end].col, "unclosed '['")
-						end = closing_index + 1
+					end = findarrsub(buf, end)
+					if end == -1:
+						return -1, parserError(buf[end].row, buf[end].col, "unclosed '['")
 					newnode = ACCESS_node(buf[s:end])
 					newnode.expand()
 					return end, newnode
@@ -610,14 +777,63 @@ class ACCESS_node(ptnode):
 
 	# rule: ACCESS -> id | ACCESS [ EXPR ]
 	def expand(self):
-		self.expanded = True # TODO
+		self.expanded = True
+		self.children.append(self.buf[0]) # id
+		left = 1
+		right = 1
+		while right < len(self.buf) - 1:
+			right = pairmatch(self.buf, left, '[', ']')
+			self.children.append(self.buf[left]) # [
+			if right - left == 1:
+				self.children.append(parserError(self.buf[left].row. self.buf[left].col, "expect expression"))
+				return
+			self.children.append(EXPR_node(self.buf[left+1:right]))
+			self.children.append(self.buf[right]) # [
+			left = right+1
 
 class CALLEXPR_node(ptnode):
+	# buf will look like id ( ... )
 	def __init__(self, buf: ['token']):
 		super().__init__('CALLEXPR', buf)
 
+	# rule: CALLEXPR -> id ( ARGLIST )
 	def expand(self):
-		self.expanded = True # TODO
+		self.expanded = True
+		self.children.append(self.buf[0]) # id
+		self.children.append(self.buf[1]) # (
+		self.children.append(ARGLIST_node(self.buf[2:-1])) # ARGLIST
+		self.children.append(self.buf[-1]) # )
+		self.buf = []
+
+class ARGLIST_node(ptnode):
+	# buf can be anything
+	def __init__(self, buf: ['token']):
+		super().__init__('ARGLIST', buf)
+
+	# rule: ARGLIST -> EXPR , ARGLIST | epsilon
+	def expand(self):
+		self.expanded = True
+		# empty arglist
+		if len(self.buf) == 0:
+			return
+		
+		expr_start = 0
+		expr_end = findnext(self.buf, expr_start, ',')
+		# the first token should not be comma
+		if expr_end == 0:
+			self.children.append(parserError(self.buf[0].row, self.buf[0].col, "expect expression"))
+		while expr_end != -1:
+			# the last token should not be comma
+			if expr_end == len(self.buf) - 1:
+				self.children.append(parserError(self.buf[-1].row, self.buf[-1].col, "expect expression"))
+				return
+			else:
+				self.children.append(EXPR_node(self.buf[expr_start:expr_end])) # EXPR
+				self.children.append(self.buf[expr_end]) # ,
+				expr_start = expr_end + 1
+				expr_end = findnext(self.buf, expr_start, ',')
+		self.children.append(EXPR_node(self.buf[expr_start:]))
+		self.buf = []
 
 class UNARY_node(ptnode):
 	def __init__(self, left: 'op/EXPR_node', right: 'op/EXPR_node'):
@@ -651,7 +867,7 @@ class parser():
 					return err
 			return None
 
-		root = S_node(buf[:])# copy buf since it will be cleared
+		root = S_node(buf)
 		err = parse_dfs(root)
 		return err, root
 

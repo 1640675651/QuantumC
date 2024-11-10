@@ -17,6 +17,14 @@ def isjmp(t: token) -> bool:
 	jmpops = ['break', 'continue', 'return']
 	return t.type == 'kw' and t.value in jmpops
 
+class parserError():
+	def __init__(self, row: int, col: int, info: str):
+		self.row = row
+		self.col = col
+		self.info = info
+	def __str__(self):
+		return "Syntax error at row " + str(self.row) + ' col ' + str(self.col) + ": " + self.info
+
 # find consistent pairing structure (like nested parentheses) nearest to the right of starting index s
 # return the index of the last closing token
 def pairmatch(buf: [token], s: int, t1: str, t2: str) -> int:
@@ -37,6 +45,23 @@ def findnext(buf: [token], s: int, t: str) -> int:
 			return i
 	return -1
 
+# find the next token not within any nested structure
+# returns (-1, parserError) if finding unclosed nested structure
+# returns (len(buf), None) if not finding any token
+def findnext_unnested(buf: [token], s: int, t: str) -> (int, parserError):
+	parens = {'(':')', '[':']', '{':'}'}
+	end = s
+	while end < len(buf) and not (buf[end].type == 'punc' and buf[end].value == t):
+			if buf[end].type == 'punc' and buf[end].value in parens:
+				last_end = end
+				lparen = buf[end].value
+				rparen = parens[lparen]
+				end = pairmatch(buf, end, lparen, rparen)
+				if end == -1:
+					return -1, parserError(buf[last_end].row, buf[last_end].col, f"unclosed '{nest_token}'")
+			end += 1
+	return end, None
+
 # buf[s] should be [
 # return the index of the last ] + 1
 def findarrsub(buf: [token], s: int) -> int:
@@ -56,15 +81,6 @@ def findtokens(buf: [token], t: str) -> [int]:
 		if buf[i].type == 'punc' and buf[i].value == t:
 			ret.append(i)
 	return ret
-
-class parserError():
-	def __init__(self, row: int, col: int, info: str):
-		self.row = row
-		self.col = col
-		self.info = info
-	def __str__(self):
-		return "Syntax error at row " + str(self.row) + ' col ' + str(self.col) + ": " + self.info
-
 
 class ptnode(): # parse tree node
 	def __init__(self, name: 'str', buf: ['token']):
@@ -211,10 +227,12 @@ def nextinit(buf) -> ('parsed len', ptnode):
 		if end == -1:
 			return -1, parserError(buf[0].row, buf[0].col, "unclosed '{'")
 		return end+1, ARRLIT_node(buf[:end+1])
-	# EXPR, advance to the next comma
-	end = findnext(buf, 0, ',')
+	# EXPR, advance to the next comma not within any nested structure
+	end, err = findnext_unnested(buf, 0, ',')
+	# unclosed nested structure
 	if end == -1:
-		return len(buf), EXPR_node(buf)
+		return -1, err
+	# the first token should not be comma
 	if end == 0:
 		return -1, parserError(buf[0].row, buf[0].col, "expect initializer")
 	return end, EXPR_node(buf[:end]) # not including comma
@@ -807,7 +825,7 @@ class CALLEXPR_node(ptnode):
 
 class ARGLIST_node(ptnode):
 	# buf can be anything
-	def __init__(self, buf: ['token']):
+	def __init__(self, buf: [token]):
 		super().__init__('ARGLIST', buf)
 
 	# rule: ARGLIST -> EXPR , ARGLIST | epsilon
@@ -818,20 +836,26 @@ class ARGLIST_node(ptnode):
 			return
 		
 		expr_start = 0
-		expr_end = findnext(self.buf, expr_start, ',')
-		# the first token should not be comma
-		if expr_end == 0:
-			self.children.append(parserError(self.buf[0].row, self.buf[0].col, "expect expression"))
-		while expr_end != -1:
+		expr_end, err = findnext_unnested(self.buf, expr_start, ',')
+		while expr_end < len(self.buf):
+			# the first token should not be comma
+			if expr_end == expr_start:
+				self.children.append(parserError(self.buf[0].row, self.buf[0].col, "expect expression"))
+				return
+			# unclosed nested structure
+			if expr_end == -1:
+				self.children.append(err)
+				return
 			# the last token should not be comma
 			if expr_end == len(self.buf) - 1:
 				self.children.append(parserError(self.buf[-1].row, self.buf[-1].col, "expect expression"))
 				return
-			else:
-				self.children.append(EXPR_node(self.buf[expr_start:expr_end])) # EXPR
-				self.children.append(self.buf[expr_end]) # ,
-				expr_start = expr_end + 1
-				expr_end = findnext(self.buf, expr_start, ',')
+
+			self.children.append(EXPR_node(self.buf[expr_start:expr_end])) # EXPR
+			self.children.append(self.buf[expr_end]) # ,
+			expr_start = expr_end + 1
+			expr_end, err = findnext_unnested(self.buf, expr_start, ',')
+		
 		self.children.append(EXPR_node(self.buf[expr_start:]))
 		self.buf = []
 

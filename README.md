@@ -11,7 +11,7 @@
 3. operators\
 	\+ - * / % = & | ~ ^ && || ! < > <= >= == != << >> ++ -- += -= *= /= &= |= ~= ^= &&= ||= %= <<= >>=
 
-4. literals\  
+4. literals\
 	4.1. int literal
 	[0-9]* 
 
@@ -61,9 +61,21 @@ Error handling: there are 2 possible types of lexical errors:
 
 2. Unclosed double quote, single quote, and block comment. This happens when the FSM is in instrlit, inchrlit, inblkcomm, unclosed_str, unclosed_chr and no further transitions are available.
 
-## How to Test the Lexer
+## How to test the lexer
 python3 lexer.py sourcefile\
 This will output the token list to stdout
+
+# Parser
+
+## Grammar Definition
+See CFG.txt
+
+## Parsing Algorithm
+Hand-written recursive descent. Each non-terminal node has an expand() function, which determines which portion of the input token stream belongs to which child node. For expression evaluation, we use precedence climbing for operator precedence parsing.
+
+## How to test the parser
+python3 parser.py sourcefile\
+This will output the AST to stdout
 
 # Team member
 Hongzheng Zhu hz2915

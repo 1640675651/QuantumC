@@ -75,7 +75,8 @@ Hand-written recursive descent. Each non-terminal node has an expand() function,
 
 ## How to test the parser
 python3 parser.py sourcefile\
-This will output the AST to stdout
+This will output the AST to stdout\
+Demo video: https://youtu.be/MKKk0_XGiAU (accessible with columbia.edu account)
 
 # Team member
 Hongzheng Zhu hz2915

@@ -88,10 +88,11 @@ class ptnode(): # parse tree node
 		self.buf = buf
 		self.children = []
 		self.expanded = False
-		self.start_row = 0
-		self.start_col = 0
+		self.start_row = -1
+		self.start_col = -1
 		self.end_row = -1
 		self.end_col = -1
+		self.scope = -1
 
 	def expand(self):
 		pass

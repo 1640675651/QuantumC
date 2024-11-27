@@ -8,7 +8,7 @@
 
 # in classical computers, we put global variables to the data section and local variables to the stack.
 # temporary variables on the top of the stack
-from lexer import lexer
+from lexer import lexer, token
 from parser import parser
 
 class semanticError():
@@ -18,6 +18,9 @@ class semanticError():
         self.info = info
     def __str__(self):
         return "Semantic error at row " + str(self.row) + ' col ' + str(self.col) + ": " + self.info
+
+class semanticWarning():
+    pass
 
 class variable():
     def __init__(self, node: 'VARDECL_node'):
@@ -56,38 +59,54 @@ class symbolTable():
         self.table[s][v.name] = v
         return None
 
+    def find(self, s: int, name: str, row: int, col: int) -> variable:
+        if name in self.table[s]:
+            var = self.table[s][name]
+            if (var.row, var.col) < (row, col):
+                return var
+        if s != 0:
+            return self.find(self.parent[s], name, row, col)
+        return None
 
 class semanticAnalyzer():
     def construct_symbol_table(self, node: 'S_node') -> symbolTable:
-        def construct_st_dfs(node: 'STMTLIST_node/IFELSE/FOR/WHILE', scope: int, st: symbolTable) -> semanticError:
-            for child in node.children:
-                err = None
-                if child.name == 'VARDECL':
-                    var = variable(child)
-                    err = st.insert(scope, var)
-                elif child.name == 'ARRDECL':
-                    row = child.children[1].row
-                    col = child.children[1].col
-                    err = semanticError(row, col, "array is not supported")
-                elif child.name == 'CPDSTMT': # enter a new scope
-                    if len(child.children) > 0:
-                        new_scope_num = len(st.table)
-                        st.newscope(scope)
-                        err = construct_st_dfs(child.children[0], new_scope_num, st)
-                elif child.name == 'IFELSE' or child.name == 'FOR' or child.name == 'WHILE':
+        def construct_st_dfs(node: 'ptnode', scope: int, st: symbolTable) -> semanticError:
+            node.scope = scope # annotate scope information in the AST
+            err = None
+            if node.name == 'VARDECL':
+                var = variable(node)
+                err = st.insert(scope, var)
+            elif node.name == 'ARRDECL':
+                row = node.children[1].row
+                col = node.children[1].col
+                err = semanticError(row, col, "array is not supported")
+            elif node.name == 'CPDSTMT': # enter a new scope
+                if len(node.children) > 0:
+                    new_scope_num = len(st.table)
+                    st.newscope(scope)
+                    err = construct_st_dfs(node.children[0], new_scope_num, st)
+            elif node.name == 'ACCESS':
+                row = node.children[0].row
+                col = node.children[0].col
+                if len(node.children) > 1:
+                    err = semanticError(row, col, "array access is not supported")
+                else:
+                    name = node.children[0].value
+                    var = st.find(scope, name, row, col)
+                    if var == None:
+                        err = semanticError(row, col, f"undefined identifier {name}")
+            elif node.name == 'CALLEXPR':
+                row = node.children[0].row
+                col = node.children[0].col
+                err = semanticError(row, col, "function call is not supported")
+            else:
+                for child in node.children:
+                    if type(child) == token:
+                        continue
                     err = construct_st_dfs(child, scope, st)
-                # elif child.name == 'IFELSE':
-                #     if child.children[1].name == 'CPDSTMT':
-                #         err = construct_st_dfs(child.children[1], scope, st)
-                #         if err != None:
-                #             return err
-                #     if len(child.children) == 3 and child.children[2].name == 'CPDSTMT': # has an else
-                #         err = construct_st_dfs(child.children[2], scope, st)
-                # elif child.name == 'FOR' or child.name == 'WHILE':
-                #     if child.children[1].name == 'CPDSTMT':
-                #         err = construct_st_dfs(child.children[1], scope, st)
-                if err != None:
-                    return err
+                    if err != None:
+                        break
+            return err
 
         st = symbolTable()
         cur_scope = 0
@@ -95,7 +114,7 @@ class semanticAnalyzer():
         decllist = node.children[0]
         for child in decllist.children:
             if child.name == 'VARDECL':
-                var = variable(child)
+                var = variable(child)                
                 err = st.insert(0, var)
                 if err != None:
                     return err
@@ -129,12 +148,37 @@ class semanticAnalyzer():
                     return err
         return st
 
+    def typecheck(self, node: 'S_node'):
+        def typecheck_dfs(node: 'ptnode') -> semanticError:
+            if type(node) == token:
+                if node.type == 'intlit':
+                    intval = int(node.value)
+                    if intval > 2**31 - 1 or intval < - 2**31:
+                        return semanticError(node.row, node.col, f'{intval} exceeds the maximum range of int32')
+                if node.type == 'chrlit':
+                    if len(node.value.strip("'")) != 1:
+                        return semanticError(node.row, node.col, 'character literal must contain exactly 1 character')
+                if node.type == 'strlit':
+                    return semanticError(node.row, node.col, 'string is not supported')
+                return None
+            for child in node.children:
+                err = typecheck_dfs(child)
+                if err != None:
+                    return err
+            return None
+
+        return typecheck_dfs(node)
+
     def run(self, node: 'S_node'):
         st = self.construct_symbol_table(node)
         if type(st) == semanticError:
             print(st)
         else:
             print_st(st)
+
+        err = self.typecheck(node)
+        if err != None:
+            print(err)
 
 def print_st(st: symbolTable, scope_num = 0, depth = 0):
     print('\t'*depth, f'Scope {scope_num}:', st.table[scope_num].keys())

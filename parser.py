@@ -88,12 +88,16 @@ class ptnode(): # parse tree node
 		self.buf = buf
 		self.children = []
 		self.expanded = False
+		self.start_row = 0
+		self.start_col = 0
+		self.end_row = -1
+		self.end_col = -1
 
 	def expand(self):
 		pass
 
 	def __str__(self):
-		return self.name
+		return self.name #+ f' {self.start_row}, {self.start_col}, {self.end_row}, {self.end_col}'
 
 def nextdecl(buf) -> ('parsed len', ptnode):
 	# a declaration contains at least 3 tokens
@@ -246,6 +250,7 @@ class S_node(ptnode):
 		newnode = DECLLIST_node(self.buf)
 		self.children.append(newnode)
 		self.expanded = True
+		self.buf = []
 
 class DECLLIST_node(ptnode):
 	def __init__(self, buf: ['token']):
@@ -877,8 +882,33 @@ class parser():
 					return err
 			return None
 
+		# get the start/end row/col of each AST node
+		# the row/col of a token is its ending position
+		# punctuations like } are ignored in AST, so the ending row/col of an AST node may be slightly different
+		def get_row_col(node: ptnode):
+			for child in node.children:
+				if type(child) == token:
+					continue
+				get_row_col(child)
+			if len(node.children) > 0:
+				if type(node.children[0]) == token:
+					node.start_row = node.children[0].row
+					node.start_col = node.children[0].col
+				else:
+					node.start_row = node.children[0].start_row
+					node.start_col = node.children[0].start_col
+
+				if type(node.children[-1]) == token:
+					node.end_row = node.children[-1].row
+					node.end_col = node.children[-1].col
+				else:
+					node.end_row = node.children[-1].end_row
+					node.end_col = node.children[-1].end_col
+
 		root = S_node(buf)
 		err = parse_dfs(root)
+		if err == None:
+			get_row_col(root)
 		return err, root
 
 def print_pt(node, depth: int):

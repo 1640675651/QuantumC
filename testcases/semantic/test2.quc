@@ -1,0 +1,22 @@
+// test function call and array access
+int16 global = 0;
+
+void main()
+{
+	int8 local1 = 1;
+	if(local1 == 0)
+	{
+		int8 local2 = 2;
+		int8 i;
+		for(i=0;i<5;i++)
+		{
+			int8 local3 = i;
+		}
+	}
+	else
+	{
+		int8 local4 = 4;
+		global = local4;
+		int8 global = 5;
+	}
+}

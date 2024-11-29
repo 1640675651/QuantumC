@@ -159,7 +159,7 @@ class semanticAnalyzer():
         return st
 
     def typecheck(self, node: 'S_node'):
-        def typecheck_dfs(node: 'ptnode') -> semanticError:
+        def typecheck_dfs(node: 'ptnode', inloop: bool) -> semanticError:
             if type(node) == token:
                 if node.type == 'intlit':
                     intval = int(node.value)
@@ -170,14 +170,21 @@ class semanticAnalyzer():
                         return semanticError(node.row, node.col, 'character literal must contain exactly 1 character')
                 if node.type == 'strlit':
                     return semanticError(node.row, node.col, 'string is not supported')
-                return None
+                if node.type == 'kw':
+                    if node.value == 'return':
+                        return semanticError(node.row, node.col, 'return statement is not supported') 
+                    if (node.value == 'break' or node.value == 'continue') and inloop == False:
+                        return semanticError(node.row, node.col, f'{node.value} not within loop context')
+                return None 
             for child in node.children:
-                err = typecheck_dfs(child)
+                if type(child) != token and (child.name == 'FOR' or child.name == 'WHILE'):
+                    inloop = True
+                err = typecheck_dfs(child, inloop)
                 if err != None:
                     return err
             return None
 
-        return typecheck_dfs(node)
+        return typecheck_dfs(node, False)
 
     def run(self, node: 'S_node') -> (semanticError, symbolTable):
         st = self.construct_symbol_table(node)

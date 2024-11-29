@@ -6,6 +6,18 @@ from lexer import lexer, token
 from parser import parser
 from semantic import symbolTable, variable, semanticAnalyzer
 
+class instruction():
+    def __init__(self, name, operands):
+        self.name = name
+        self.operands = [] # (segment, offset, len)
+
+class basicBlock():
+    def __init__(self):
+        self.instructions = []
+        self.next1 = None
+        self.next2 = None
+        self.condition = None # some variable/temp vars
+
 class IRgenerator():
     def assign_addr(self, st: symbolTable) -> ('data section usage', 'stack usage'):
         def assign_stack_addr(st: symbolTable, scope: int, cur_stack_len: int) -> 'stack usage':
@@ -32,8 +44,26 @@ class IRgenerator():
         stack_len = assign_stack_addr(st, 1, 0)
         return data_len, stack_len
 
-    def AST2IR(node: 'ptnode'):
-        pass
+    # convert each function to a control flow graph
+    def AST2IR(self, node: 'S_node', st: symbolTable, stack_len: int) -> basicBlock:
+        def STMTLIST2IR(node: 'STMTLIST_node', st: symbolTable, stack_len: int) -> basicBlock:
+            for child in node.children:
+                if child.name == 'CPDSTMT':
+                    pass
+                if child.name == 'EXPRSTMT':
+                    pass
+                if child.name == 'IFELSE':
+                    pass
+                if child.name == 'FOR':
+                    pass
+                if child.name == 'WHILE':
+                    pass
+                if child.name == 'JMP':
+                    pass
+
+        for decl in node.children.children:
+            if decl.name == 'FUNCDECL':
+                return func2IR(decl.children[3], st, stack_len) # pass STMTLIST into STMTLIST2IR
 
 def print_st(st: symbolTable, scope_num = 0, depth = 0):
     print('\t'*depth, f'Scope {scope_num}:')

@@ -4,7 +4,7 @@
 # each CPDSTMT is a new scope.
 
 # 3. type checking
-# not supporting function call, only need to check EXPR and ACCESS
+# not supporting function call, only need to check ACCESS
 
 # in classical computers, we put global variables to the data section and local variables to the stack.
 # temporary variables on the top of the stack
@@ -22,13 +22,23 @@ class semanticError():
 class semanticWarning():
     pass
 
+def typelen(t: str) -> int:
+    if t.startswith('int'):
+        return int(t.strip('int'))
+    if t == 'char':
+        return 8
+    if t == 'bit':
+        return 1
+
 class variable():
     def __init__(self, node: 'VARDECL_node'):
         self.type = node.children[0].value
+        self.size = typelen(self.type)
         self.name = node.children[1].value
         self.row = node.children[1].row
         self.col = node.children[1].col
         self.addr = None
+        self.segment = None
 
 class function():
     def __init__(self, ret_t, name, row, col, paramlist: [('type', 'id')]):
@@ -169,16 +179,15 @@ class semanticAnalyzer():
 
         return typecheck_dfs(node)
 
-    def run(self, node: 'S_node'):
+    def run(self, node: 'S_node') -> (semanticError, symbolTable):
         st = self.construct_symbol_table(node)
         if type(st) == semanticError:
-            print(st)
-        else:
-            print_st(st)
+            return st, None
 
         err = self.typecheck(node)
         if err != None:
-            print(err)
+            return err, None
+        return None, st
 
 def print_st(st: symbolTable, scope_num = 0, depth = 0):
     print('\t'*depth, f'Scope {scope_num}:', st.table[scope_num].keys())
@@ -206,7 +215,12 @@ def main():
             return
 
         s = semanticAnalyzer()
-        s.run(root)
+        err, st = s.run(root)
+        if err != None:
+            print(err)
+        else:
+            print_st(st)
+        file.close()
 
 if __name__ == '__main__':
     main()

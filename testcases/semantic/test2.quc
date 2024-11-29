@@ -15,6 +15,7 @@ void main()
 	}
 	else
 	{
+		//local4 = 114514;
 		int8 local4 = 4;
 		global = local4;
 		int8 global = 5;

@@ -16,7 +16,14 @@ class basicBlock():
         self.instructions = []
         self.next1 = None
         self.next2 = None
-        self.condition = None # some variable/temp vars
+        self.condition = None # some variable/temp var
+
+class loopBlock():
+    def __init__(self):
+        self.firstblock = None
+        self.lastblock = None
+        self.instructions = [] # loop condition checking
+        self.condition = None
 
 class IRgenerator():
     def assign_addr(self, st: symbolTable) -> ('data section usage', 'stack usage'):
@@ -45,25 +52,39 @@ class IRgenerator():
         return data_len, stack_len
 
     # convert each function to a control flow graph
-    def AST2IR(self, node: 'S_node', st: symbolTable, stack_len: int) -> basicBlock:
-        def STMTLIST2IR(node: 'STMTLIST_node', st: symbolTable, stack_len: int) -> basicBlock:
+    def AST2IR(self, node: 'S_node', st: symbolTable, stack_len: int) -> (basicBlock, 'new_stack_len'):
+        def STMTLIST2IR(node: 'STMTLIST_node', st: symbolTable, stack_len: int) -> ('firstblock', 'lastblock', 'new_stack_len'):
+            firstblock = basicBlock()
+            lastblock = firstblock
+            stack_len_max = stack_len
             for child in node.children:
                 if child.name == 'CPDSTMT':
-                    pass
+                    if len(child.children) > 0:
+                        new_fb, new_lb, new_stack_len = STMTLIST2IR(child.children[0], st, stack_len)
+                        lastblock.next1 = new_fb
+                        lastblock = new_lb
+                        stack_len_max = max(stack_len_max, new_stack_len)
                 if child.name == 'EXPRSTMT':
-                    pass
+                    instructions, new_stack_len = EXPR2IR(child, st, stack_len)
+                    lastblock.instructions += instructions
+                    stack_len_max = max(stack_len_max, new_stack_len)
                 if child.name == 'IFELSE':
+                    # evaluate condition EXPR, append to lastblock.instructions
+                    # set lastblock.condition
+                    # create a new last block and point the last blocks of ifelse to the new last block
                     pass
                 if child.name == 'FOR':
+                    # treat loop as one single block
                     pass
                 if child.name == 'WHILE':
+                    # treat loop as one single block
                     pass
                 if child.name == 'JMP':
                     pass
 
         for decl in node.children.children:
             if decl.name == 'FUNCDECL':
-                return func2IR(decl.children[3], st, stack_len) # pass STMTLIST into STMTLIST2IR
+                return STMTLIST2IR(decl.children[3], st, stack_len) # pass STMTLIST into STMTLIST2IR
 
 def print_st(st: symbolTable, scope_num = 0, depth = 0):
     print('\t'*depth, f'Scope {scope_num}:')

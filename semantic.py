@@ -9,7 +9,7 @@
 # in classical computers, we put global variables to the data section and local variables to the stack.
 # temporary variables on the top of the stack
 from lexer import lexer, token
-from parser import parser
+from parser import parser, ACCESS_node
 
 class semanticError():
     def __init__(self, row: int, col: int, info: str):
@@ -72,7 +72,7 @@ class symbolTable():
     def find(self, s: int, name: str, row: int, col: int) -> variable:
         if name in self.table[s]:
             var = self.table[s][name]
-            if (var.row, var.col) < (row, col):
+            if (var.row, var.col) <= (row, col):
                 return var
         if s != 0:
             return self.find(self.parent[s], name, row, col)
@@ -159,6 +159,10 @@ class semanticAnalyzer():
         return st
 
     def typecheck(self, node: 'S_node'):
+        assignment_ops = {'=', '+=', '-=', '*=', '/=', '%=', '&=', '|=', '~=', '^=', '&&=', '||=', '<<=', '>>='}
+        def is_assignment_op(op: token):
+            return '=' in token.value and token.value != '==' and token.value != '!='
+
         def typecheck_dfs(node: 'ptnode', inloop: bool) -> semanticError:
             if type(node) == token:
                 if node.type == 'intlit':
@@ -176,6 +180,25 @@ class semanticAnalyzer():
                     if (node.value == 'break' or node.value == 'continue') and inloop == False:
                         return semanticError(node.row, node.col, f'{node.value} not within loop context')
                 return None 
+            # ++/-- must operate on variables
+            if node.name == 'UNARY':
+                # prefix operator, like ++i, -i
+                if type(node.children[0]) == token and node.children[0].type == 'op':
+                    operator, operand = node.children
+                    if (operator.value == '++' or operator.value == '--') and type(operand) != ACCESS_node:
+                        return semanticError(operator.row, operator.col, '++/-- must operate on variables')
+                # postfix operator
+                else:
+                    operand, operator = node.children
+                    if type(operand) != ACCESS_node:
+                        return semanticError(operator.row, operator.col, '++/-- must operate on variables')
+            # for assignment operators, LHS must be variable
+            if node.name == 'BINARY':
+                lhs, operator = node.children[0], node.children[1]
+                if operator.value in assignment_ops:
+                    if type(lhs) != ACCESS_node:
+                        return semanticError(operator.row, operator.col, 'the left hand side of an assignment operator must be a variable')
+
             for child in node.children:
                 if type(child) != token and (child.name == 'FOR' or child.name == 'WHILE'):
                     inloop = True

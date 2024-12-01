@@ -6,24 +6,33 @@ from lexer import lexer, token
 from parser import parser
 from semantic import symbolTable, variable, semanticAnalyzer
 
+class memcell():
+    def __init__(self, segment: str, offset: int, size: int):
+        self.segment = segment
+        self.offset = offset
+        self.size = size
+
 class instruction():
     def __init__(self, name, operands):
         self.name = name
-        self.operands = [] # (segment, offset, len)
+        self.operands = [] # [memcell]
 
 class basicBlock():
     def __init__(self):
         self.instructions = []
         self.next1 = None
         self.next2 = None
-        self.condition = None # some variable/temp var
+        self.branch = False # IFELSE
 
 class loopBlock():
     def __init__(self):
         self.firstblock = None
-        self.lastblock = None
-        self.instructions = [] # loop condition checking
-        self.condition = None
+        self.lastblock = None # should contain loop condition checking
+
+class branchBlock():
+    def __init__(self):
+        self.firstblock = None # should contain condition evaluation
+        self.lastblock = None # the merge point
 
 class IRgenerator():
     def assign_addr(self, st: symbolTable) -> ('data section usage', 'stack usage'):
@@ -53,6 +62,7 @@ class IRgenerator():
 
     # convert each function to a control flow graph
     def AST2IR(self, node: 'S_node', st: symbolTable, stack_len: int) -> (basicBlock, 'new_stack_len'):
+        cond_reg = memcell('cond', 0, 1)
         def STMTLIST2IR(node: 'STMTLIST_node', st: symbolTable, stack_len: int) -> ('firstblock', 'lastblock', 'new_stack_len'):
             firstblock = basicBlock()
             lastblock = firstblock
@@ -65,13 +75,15 @@ class IRgenerator():
                         lastblock = new_lb
                         stack_len_max = max(stack_len_max, new_stack_len)
                 if child.name == 'EXPRSTMT':
-                    instructions, new_stack_len = EXPR2IR(child, st, stack_len)
+                    # the value of the expression is not needed
+                    instructions, new_stack_len, _, _ = EXPR2IR(child, st, stack_len)
                     lastblock.instructions += instructions
                     stack_len_max = max(stack_len_max, new_stack_len)
                 if child.name == 'IFELSE':
-                    # evaluate condition EXPR, append to lastblock.instructions
-                    # set lastblock.condition
+                    new_last_block, new_stack_len = IFELSE2IR(child, st, stack_len)
                     # create a new last block and point the last blocks of ifelse to the new last block
+                    lastblock.next1 = new_last_block
+                    lastblock = new_last_block
                     pass
                 if child.name == 'FOR':
                     # treat loop as one single block
@@ -81,6 +93,76 @@ class IRgenerator():
                     pass
                 if child.name == 'JMP':
                     pass
+
+        # evaluate an expression, allocate temporary variables, return the temporary variable that contains the result
+        def EXPR2IR(node: 'EXPR_node/BINARY_node/UNARY_node/CPDEXPR_node/ACCESS_node/literal', st: symbolTable, stack_len: int) -> (['instruction'], 'new_stack_len', 'temp memcell'):
+            # maybe handle literal values at other places where the value is actually used.
+            # that gives us more information on choosing the length of the temp var and we can save stack space if the value is not used.
+            # here we need to check if the EXPR is solely a literal. If so, the literal is unused and we can emit no code about it.
+            if type(actual_expr) == token: 
+                    return [], stack_len, None
+            if node.name == 'EXPR':
+                return EXPR2IR(node.children[0], st, stack_len)
+            elif node.name == 'BINARY':
+                return BINARY2IR(node, st, stack_len)
+            elif node.name == 'UNARY':
+                return UNARY2IR(actual_expr, st, stack_len)
+            elif node.name == 'CPDEXPR':
+                return EXPR2IR(actual_expr.children[0], st, stack_len)
+            elif node.name == 'ACCESS': # for access, just return the variable, instead of creating temp vars
+                varname = actual_expr[0].value
+                var = st.find(varname)
+                return [], stack_len, memcell(var.segment, var.addr, var.size)
+
+        # TODO: first write EXPR2IR and its required functions
+        # maybe first write + - = for now
+        def BINARY2IR(node: 'BINARY_node', st: symbolTable, stack_len: int) -> (['instruction'], 'new_stack_len', 'temp memcell'):
+            insts = []
+            lhs, operator, rhs = node.children
+            stack_len_max = stack_len
+            
+            # evaluate lhs and rhs, stored in mem cells t1 and t2
+            insts_lhs, new_stack_len, t1 = EXPR2IR(lhs, st, stack_len)
+            stack_len_max = max(stack_len_max, new_stack_len)
+            insts_rhs, new_stack_len, t2 = EXPR2IR(rhs, st, stack_len)
+            stack_len_max = max(stack_len_max, new_stack_len)
+
+            # if the two operands have different size, extend the shorter one
+            
+
+        def UNARY2IR(node: 'BINARY_node', st: symbolTable, stack_len: int) -> (['instruction'], 'new_stack_len', 'temp memcell'):
+            pass
+
+        def IFELSE2IR(node: 'IFELSE_node', st: symbolTable, stack_len: int) -> ('branchBlock', 'new_stack_len'):
+            ret = branchBlock()
+            ret.firstblock = basicBlock()
+            ret.lastblock = basicBlock()
+            
+            # evaluate condition EXPR
+            condexpr = node.children[0]
+            instructions, new_stack_len, tempvar = EXPR2IR(condexpr, st, stack_len)
+            ret.firstblock.instructions += instructions
+            # store the evaluated bit to cond register
+            ret.firstblock.instructions.append(instruction('tobool', tempvar, cond_reg))
+            stack_len_max = max(stack_len, new_stack_len)
+            ret.firstblock.branch = True
+
+            # evaluate if body
+            if_body = node.children[1]
+            if_fb, if_lb, new_stack_len = STMT2IR(if_body, st, stack_len)
+            ret.firstblock.next1 = if_fb
+            if_lb.next1 = ret.lastblock
+            stack_len_max = max(stack_len_max, new_stack_len)
+
+            # evaluate else body
+            if len(node.children) == 3:
+                else_body = node.children[2]
+                else_fb, else_lb, new_stack_len = STMT2IR(else_body, st, stack_len)
+                ret.firstblock.next2 = else_fb
+                else_lb.next1 = ret.lastblock
+                stack_len_max = max(stack_len_max, new_stack_len)
+            
+            return ret, stack_len_max
 
         for decl in node.children.children:
             if decl.name == 'FUNCDECL':

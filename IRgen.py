@@ -4,7 +4,7 @@
 # 3. allocate temporary variable while expanding expressions
 from lexer import lexer, token
 from parser import parser
-from semantic import symbolTable, variable, semanticAnalyzer
+from semantic import symbolTable, variable, semanticAnalyzer, typelen
 
 class memcell():
     def __init__(self, segment: str, offset: int, size: int):
@@ -121,13 +121,28 @@ class IRgenerator():
             lhs, operator, rhs = node.children
             stack_len_max = stack_len
             
+            # allocate memory cell for result
+            t_result = memcell('stack', max())
+
             # evaluate lhs and rhs, stored in mem cells t1 and t2
             insts_lhs, new_stack_len, t1 = EXPR2IR(lhs, st, stack_len)
             stack_len_max = max(stack_len_max, new_stack_len)
+            stack_len += t1.size
             insts_rhs, new_stack_len, t2 = EXPR2IR(rhs, st, stack_len)
             stack_len_max = max(stack_len_max, new_stack_len)
-
+            insts += insts_lhs
+            insts += insts_rhs
             # if the two operands have different size, extend the shorter one
+            # put the extended variable right after t2
+            t1_ext = t1
+            t2_ext = t2
+            if t1.size > t2.size:
+                t2_ext = memcell('stack', t2.offset+t2.size, t1.size)
+                insts += instruction('copy', [t2, t2_ext])
+            elif t1.size < t2.size:
+                t1_ext = memcell('stack', t2.offset+t2.size, t2.size)
+                insts += instruction('copy', [t1, t1_ext])
+
             
 
         def UNARY2IR(node: 'BINARY_node', st: symbolTable, stack_len: int) -> (['instruction'], 'new_stack_len', 'temp memcell'):

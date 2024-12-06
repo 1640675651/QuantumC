@@ -9,7 +9,7 @@
 # in classical computers, we put global variables to the data section and local variables to the stack.
 # temporary variables on the top of the stack
 from lexer import lexer, token
-from parser import parser, ACCESS_node
+from parser import parser, ACCESS_node, parserError
 
 class semanticError():
     def __init__(self, row: int, col: int, info: str):
@@ -109,13 +109,13 @@ class semanticAnalyzer():
                 row = node.children[0].row
                 col = node.children[0].col
                 err = semanticError(row, col, "function call is not supported")
-            else:
-                for child in node.children:
-                    if type(child) == token:
-                        continue
-                    err = construct_st_dfs(child, scope, st)
-                    if err != None:
-                        break
+            #else: # need to recursively mark the the scope of all nodes
+            for child in node.children:
+                if type(child) == token:
+                    continue
+                err = construct_st_dfs(child, scope, st)
+                if err != None:
+                    break
             return err
 
         st = symbolTable()
@@ -158,12 +158,12 @@ class semanticAnalyzer():
                     return err
         return st
 
-    def typecheck(self, node: 'S_node'):
+    def typecheck(self, node: 'S_node', st: symbolTable,):
         assignment_ops = {'=', '+=', '-=', '*=', '/=', '%=', '&=', '|=', '~=', '^=', '&&=', '||=', '<<=', '>>='}
         def is_assignment_op(op: token):
             return '=' in token.value and token.value != '==' and token.value != '!='
 
-        def typecheck_dfs(node: 'ptnode', inloop: bool) -> semanticError:
+        def typecheck_dfs(node: 'ptnode', st: symbolTable, inloop: bool) -> semanticError:
             if type(node) == token:
                 if node.type == 'intlit':
                     intval = int(node.value)
@@ -202,19 +202,56 @@ class semanticAnalyzer():
             for child in node.children:
                 if type(child) != token and (child.name == 'FOR' or child.name == 'WHILE'):
                     inloop = True
-                err = typecheck_dfs(child, inloop)
+                err = typecheck_dfs(child, st, inloop)
                 if err != None:
                     return err
+
+            # EXPR data size annotation
+            if node.name == 'EXPR':
+                if type(node.children[0]) == token:
+                    node.size = 0
+                else:
+                    node.size = node.children[0].size
+            if node.name == 'BINARY':
+                lhs, op, rhs = node.children
+                # should I use 1 bit temp var to store the result for comparison/logical operations
+                # maybe not, consider the case a + (b>c).
+                # though it's weird, it's legal expression
+                # if I store the result of b>c into 1 bit temp var, further extension is needed.
+                # if op.value in {'<', '>', '<=', '>=', '==', '!=', '&&', '||', '!'}:
+                #     node.size = 1 
+                # else:
+                if type(lhs) == token and type(rhs) == token:
+                    node.size = 0 # 0 for literal, size not determined yet
+                if type(lhs) == token:
+                    node.size = rhs.size
+                elif type(rhs) == token:
+                    node.size = lhs.size
+                else:
+                    node.size = max(lhs.size, rhs.size)
+            if node.name == 'UNARY':
+                operand = node.children[1]# default prefix operator
+                if type(node.children[1]) == token and node.children[1].type == 'op': # postfix operator
+                    operand = node.children[0]
+                if type(operand) == token:
+                    node.size = 0
+                else:
+                    node.size = operand.size
+            if node.name == 'ACCESS':
+                var = st.find(node.scope, node.children[0].value, node.children[0].row, node.children[0].col)
+                node.size = var.size
+            if node.name == 'CPDEXPR':
+                node.size = node.children[0].size
             return None
 
-        return typecheck_dfs(node, False)
+        return typecheck_dfs(node, st, False)
 
     def run(self, node: 'S_node') -> (semanticError, symbolTable):
         st = self.construct_symbol_table(node)
         if type(st) == semanticError:
             return st, None
 
-        err = self.typecheck(node)
+        err = self.typecheck(node, st)
         if err != None:
             return err, None
         return None, st
@@ -223,6 +260,19 @@ def print_st(st: symbolTable, scope_num = 0, depth = 0):
     print('\t'*depth, f'Scope {scope_num}:', st.table[scope_num].keys())
     for new_scope_num in st.children[scope_num]:
         print_st(st, new_scope_num, depth + 1)
+
+def print_ast(node, depth: int):
+    print('\t'*depth + str(node), end = '')
+    if type(node) != token: 
+        size_str = ' '
+        if (node.name == 'EXPR' or node.name == 'UNARY' or node.name == 'BINARY' or node.name == 'ACCESS' or node.name == 'CPDEXPR'):
+            size_str += str(node.size)
+        print(size_str, node.scope, end = '')
+    print()
+    # do not expand error or terminals
+    if type(node) != parserError and type(node) != token:
+        for child in node.children:
+            print_ast(child, depth+1)
 
 def main():
     import sys
@@ -249,7 +299,8 @@ def main():
         if err != None:
             print(err)
         else:
-            print_st(st)
+            #print_st(st)
+            print_ast(root, 0)
         file.close()
 
 if __name__ == '__main__':

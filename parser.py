@@ -643,6 +643,7 @@ class EXPR_node(ptnode):
 
 	def __init__(self, buf: ['token']):
 		super().__init__('EXPR', buf)
+		self.size = -1
 	
 	# rules: EXPR -> PRIMARY | UNARY | BINARY
 	# PRIMARY -> literal | ACCESS | CALLEXPR | CPDEXPR
@@ -767,6 +768,7 @@ class CPDEXPR_node(ptnode):
 	# buf will look like ( ... )
 	def __init__(self, buf: ['token']):
 		super().__init__('CPDEXPR', buf)
+		self.size = -1
 	
 	def expand(self):
 		self.expanded = True
@@ -784,6 +786,7 @@ class ACCESS_node(ptnode):
 	# buf will look like id with arbitrary pairs of [ ... ]
 	def __init__(self, buf: ['token']):
 		super().__init__('ACCESS', buf)
+		self.size = -1
 
 	# rule: ACCESS -> id | ACCESS [ EXPR ]
 	def expand(self):
@@ -805,6 +808,7 @@ class CALLEXPR_node(ptnode):
 	# buf will look like id ( ... )
 	def __init__(self, buf: ['token']):
 		super().__init__('CALLEXPR', buf)
+		self.size = -1
 
 	# rule: CALLEXPR -> id ( ARGLIST )
 	def expand(self):
@@ -857,6 +861,7 @@ class UNARY_node(ptnode):
 		self.children.append(left)
 		self.children.append(right)
 		self.expanded = True
+		self.size = -1
 
 class BINARY_node(ptnode):
 	def __init__(self, left: EXPR_node, op: 'op', right: EXPR_node):
@@ -865,6 +870,7 @@ class BINARY_node(ptnode):
 		self.children.append(op)
 		self.children.append(right)
 		self.expanded = True
+		self.size = -1
 
 class parser():
 	def run(self, buf: [token]) -> (parserError, S_node):

@@ -4,18 +4,24 @@
 # 3. allocate temporary variable while expanding expressions
 from lexer import lexer, token
 from parser import parser
-from semantic import symbolTable, variable, semanticAnalyzer, typelen
+from semantic import symbolTable, variable, semanticAnalyzer, typesize, assignment_ops, litsize
 
 class memcell():
     def __init__(self, segment: str, offset: int, size: int):
         self.segment = segment
         self.offset = offset
         self.size = size
+    def __str__(self):
+        return f'({self.segment}, {self.offset}, {self.size})'
+    def __repr__(self):
+        return str(self)
 
 class instruction():
     def __init__(self, name, operands):
         self.name = name
-        self.operands = [] # [memcell]
+        self.operands = operands # [memcell]
+    def __str__(self):
+        return f'{self.name} {self.operands}'
 
 class basicBlock():
     def __init__(self):
@@ -76,7 +82,7 @@ class IRgenerator():
                         stack_len_max = max(stack_len_max, new_stack_len)
                 if child.name == 'EXPRSTMT':
                     # the value of the expression is not needed
-                    instructions, new_stack_len, _, _ = EXPR2IR(child, st, stack_len)
+                    instructions, new_stack_len, _ = EXPR2IR(child.children[0], st, stack_len)
                     lastblock.instructions += instructions
                     stack_len_max = max(stack_len_max, new_stack_len)
                 if child.name == 'IFELSE':
@@ -93,57 +99,108 @@ class IRgenerator():
                     pass
                 if child.name == 'JMP':
                     pass
+            return firstblock, lastblock, stack_len_max
+
+        # TODO: first write EXPR2IR and its required functions
 
         # evaluate an expression, allocate temporary variables, return the temporary variable that contains the result
+        # for these functions, if the returned memcell is a temporary, its starting address must equal to the stack_len argument.
+        # i.e. the result is stored in lowest possible address.
+        # if the returned memcell is a variable (for ACCESS node), the memcell should directly refer to that variable.
         def EXPR2IR(node: 'EXPR_node/BINARY_node/UNARY_node/CPDEXPR_node/ACCESS_node/literal', st: symbolTable, stack_len: int) -> (['instruction'], 'new_stack_len', 'temp memcell'):
             # maybe handle literal values at other places where the value is actually used.
             # that gives us more information on choosing the length of the temp var and we can save stack space if the value is not used.
             # here we need to check if the EXPR is solely a literal. If so, the literal is unused and we can emit no code about it.
-            if type(actual_expr) == token: 
-                    return [], stack_len, None
+            if type(node) == token:
+                return literal2IR(node, stack_len)
             if node.name == 'EXPR':
                 return EXPR2IR(node.children[0], st, stack_len)
             elif node.name == 'BINARY':
                 return BINARY2IR(node, st, stack_len)
             elif node.name == 'UNARY':
-                return UNARY2IR(actual_expr, st, stack_len)
+                return UNARY2IR(node.children[0], st, stack_len)
             elif node.name == 'CPDEXPR':
-                return EXPR2IR(actual_expr.children[0], st, stack_len)
+                return EXPR2IR(node.children[0], st, stack_len)
             elif node.name == 'ACCESS': # for access, just return the variable, instead of creating temp vars
-                varname = actual_expr[0].value
-                var = st.find(varname)
+                var = st.find(node.scope, node.children[0].value, node.children[0].row, node.children[0].col)
                 return [], stack_len, memcell(var.segment, var.addr, var.size)
 
-        # TODO: first write EXPR2IR and its required functions
-        # maybe first write + - = for now
+        def literal2IR(node: token, stack_len: int) -> (['instruction'], 'new_stack_len', 'temp memcell'):
+            value = 0
+            if node.type == 'intlit':
+                value = int(node.value)
+            elif node.type == 'chrlit':
+                value = ord(node.value[1]) # node.value contains single quote for char literals
+            size = litsize(node)
+            #value_trunc = value & (2**size-1) # truncate here or in later code gen?
+            t = memcell('stack', stack_len, size)
+            insts = [instruction('assign', [t, value])]
+            return insts, stack_len+size, t
+
         def BINARY2IR(node: 'BINARY_node', st: symbolTable, stack_len: int) -> (['instruction'], 'new_stack_len', 'temp memcell'):
             insts = []
             lhs, operator, rhs = node.children
             stack_len_max = stack_len
-            
-            # allocate memory cell for result
-            t_result = memcell('stack', max())
+
+            print('calling BINARY2IR on', node.name)
+            print('stack len =', stack_len)
+            # if is assignment operator, do not need to create temporary for result            
+            # otherwise allocate temp memory cell for result
+            # use the lowest possible offset
+            t_result = None
+            if operator.value not in assignment_ops:
+                t_result = memcell('stack', stack_len, node.size)
+                stack_len += node.size
+            # TODO: can reuse temp according to type of operation.
+            # for example, if we want to compute t1 + t2, we don't need to create a new t_result, we can just use t1 to hold the sum, i.e. t1 = t1 + t2.
+            # This depends on whether the machine instruction allows in-place operation.
+            # for now just make things simple
 
             # evaluate lhs and rhs, stored in mem cells t1 and t2
+            # must guarantee t_result, t1, and t2 use different address
+            # note if a children is an ACCESS node, the t1 or t2 here is the address of that variable, not a temporary.
             insts_lhs, new_stack_len, t1 = EXPR2IR(lhs, st, stack_len)
             stack_len_max = max(stack_len_max, new_stack_len)
-            stack_len += t1.size
+            if operator.value in assignment_ops:
+                t_result = t1
+            if type(lhs) == token or lhs.name != 'ACCESS':
+                stack_len += t1.size
+                stack_len_max = max(stack_len_max, stack_len)
             insts_rhs, new_stack_len, t2 = EXPR2IR(rhs, st, stack_len)
             stack_len_max = max(stack_len_max, new_stack_len)
+            if type(rhs) == token or rhs.name != 'ACCESS':
+                stack_len += t2.size
+                stack_len_max = max(stack_len_max, stack_len)
             insts += insts_lhs
             insts += insts_rhs
             # if the two operands have different size, extend the shorter one
             # put the extended variable right after t2
+            # assuming the copy instruction handles extension and truncation
             t1_ext = t1
             t2_ext = t2
             if t1.size > t2.size:
                 t2_ext = memcell('stack', t2.offset+t2.size, t1.size)
-                insts += instruction('copy', [t2, t2_ext])
+                insts.append(instruction('copy', [t2, t2_ext]))
+                stack_len += t1.size
+                stack_len_max = max(stack_len_max, stack_len)
             elif t1.size < t2.size:
                 t1_ext = memcell('stack', t2.offset+t2.size, t2.size)
-                insts += instruction('copy', [t1, t1_ext])
+                insts.append(instruction('copy', [t1, t1_ext]))
+                stack_len += t2.size
+                stack_len_max = max(stack_len_max, stack_len)
 
-            
+            if operator.value == '+':
+                insts.append(instruction('add_ex', [t1_ext, t2_ext, t_result]))
+            elif operator.value == '-':
+                insts.append(instruction('sub_ex', [t1_ext, t2_ext, t_result]))
+            elif operator.value == '*':
+                insts.append(instruction('mul_ex', [t1_ext, t2_ext, t_result]))
+            elif operator.value == '/':
+                insts.append(instruction('mul_ex', [t1_ext, t2_ext, t_result]))
+            elif operator.value == '=':
+                insts.append(instruction('copy', [t2_ext, t1])) # t_result = t1 here
+
+            return insts, stack_len_max, t_result
 
         def UNARY2IR(node: 'BINARY_node', st: symbolTable, stack_len: int) -> (['instruction'], 'new_stack_len', 'temp memcell'):
             pass
@@ -179,9 +236,14 @@ class IRgenerator():
             
             return ret, stack_len_max
 
-        for decl in node.children.children:
+        for decl in node.children[0].children:
             if decl.name == 'FUNCDECL':
                 return STMTLIST2IR(decl.children[3], st, stack_len) # pass STMTLIST into STMTLIST2IR
+    
+    def run(self, node: 'S_node', st: symbolTable) -> (basicBlock, 'data_len', 'stack_len'):
+        data_len, stack_len = self.assign_addr(st)
+        firstblock, lastblock, stack_len = self.AST2IR(node, st, stack_len)
+        return firstblock, data_len, stack_len
 
 def print_st(st: symbolTable, scope_num = 0, depth = 0):
     print('\t'*depth, f'Scope {scope_num}:')
@@ -190,6 +252,11 @@ def print_st(st: symbolTable, scope_num = 0, depth = 0):
             print('\t'*depth, var.name, var.type, var.segment, var.addr)
     for new_scope_num in st.children[scope_num]:
         print_st(st, new_scope_num, depth + 1)
+
+def print_CFG(blk: basicBlock):
+    for i in blk.instructions:
+        print(i)
+    
 
 def main():
     import sys
@@ -219,8 +286,9 @@ def main():
             return
 
         irgen = IRgenerator()
-        data_len, stack_len = irgen.assign_addr(st)
-        print_st(st)
+        firstblock, data_len, stack_len = irgen.run(root, st)
+        #print_st(st)
+        print_CFG(firstblock)
         print('data section usage:', data_len)
         print('stack usage:', stack_len)
         file.close()

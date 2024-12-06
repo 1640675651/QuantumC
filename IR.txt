@@ -1,14 +1,16 @@
-each register is represented by (register name, starting index, length)
+each register is represented by (segment, starting index, length)
 
 add r1, r2 (r2 = r1 + r2, len(r2) must = len(r1))
 sub r1, r2 (r2 = r1 - r2)
-mul r1, r2
-div r1, r2
 
 add_ex r1, r2, r3 (r3 = r1 + r2, len(r3) must = len(r1), len(r2))
 sub_ex r1, r2, r3 (r3 = r1 - r2)
-mul_ex
-div_ex
+mul_ex r1, r2, r3 (r3 = r1 * r2)
+div_ex r1, r2, r3 (r3 = r1/r2)
+mod_ex r1, r2, r3 (r3 = r1%r2)
+
+Note, in low level, div and mod are implemented by the same operation. We handle that in codegen.
+In this way, the intermediate code is three-address code, easier to handle in the compiler.
 
 lt r1, r2, r3 (r3 = (r1 < r2))
 gt

@@ -11,6 +11,8 @@
 from lexer import lexer, token
 from parser import parser, ACCESS_node, parserError
 
+assignment_ops = {'=', '+=', '-=', '*=', '/=', '%=', '&=', '|=', '~=', '^=', '&&=', '||=', '<<=', '>>='}
+
 class semanticError():
     def __init__(self, row: int, col: int, info: str):
         self.row = row
@@ -22,7 +24,7 @@ class semanticError():
 class semanticWarning():
     pass
 
-def typelen(t: str) -> int:
+def typesize(t: str) -> int:
     if t.startswith('int'):
         return int(t.strip('int'))
     if t == 'char':
@@ -30,10 +32,26 @@ def typelen(t: str) -> int:
     if t == 'bit':
         return 1
 
+def litsize(t: token) -> int:
+    if t.type == 'chrlit':
+        return 8
+    elif t.type == 'intlit':
+        v = int(t.value)
+        if -8 <= v <= 7:
+            return 4
+        elif -128 <= v <= 127:
+            return 8
+        elif -32768 <= v <= 32767:
+            return 16
+        #elif -2147483648 <= v <= 2147483647:
+        else:
+            return 32
+        # TODO: maybe need some warning for overflow
+
 class variable():
     def __init__(self, node: 'VARDECL_node'):
         self.type = node.children[0].value
-        self.size = typelen(self.type)
+        self.size = typesize(self.type)
         self.name = node.children[1].value
         self.row = node.children[1].row
         self.col = node.children[1].col
@@ -159,7 +177,6 @@ class semanticAnalyzer():
         return st
 
     def typecheck(self, node: 'S_node', st: symbolTable,):
-        assignment_ops = {'=', '+=', '-=', '*=', '/=', '%=', '&=', '|=', '~=', '^=', '&&=', '||=', '<<=', '>>='}
         def is_assignment_op(op: token):
             return '=' in token.value and token.value != '==' and token.value != '!='
 
@@ -209,7 +226,7 @@ class semanticAnalyzer():
             # EXPR data size annotation
             if node.name == 'EXPR':
                 if type(node.children[0]) == token:
-                    node.size = 0
+                    node.size = litsize(node.children[0])
                 else:
                     node.size = node.children[0].size
             if node.name == 'BINARY':
@@ -222,7 +239,7 @@ class semanticAnalyzer():
                 #     node.size = 1 
                 # else:
                 if type(lhs) == token and type(rhs) == token:
-                    node.size = 0 # 0 for literal, size not determined yet
+                    node.size = max(litsize(lhs), litsize(rhs)) # 0 for literal, size not determined yet
                 if type(lhs) == token:
                     node.size = rhs.size
                 elif type(rhs) == token:
@@ -234,7 +251,7 @@ class semanticAnalyzer():
                 if type(node.children[1]) == token and node.children[1].type == 'op': # postfix operator
                     operand = node.children[0]
                 if type(operand) == token:
-                    node.size = 0
+                    node.size = litsize(operand)
                 else:
                     node.size = operand.size
             if node.name == 'ACCESS':

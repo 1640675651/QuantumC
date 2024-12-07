@@ -1,4 +1,4 @@
-// test error handling
+// basic sequential block
 void main()
 {
 	int8 a;

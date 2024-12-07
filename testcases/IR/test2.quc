@@ -1,0 +1,16 @@
+// test branch block
+void main()
+{
+	int8 a; int8 b; int8 c;
+	a = 1;
+	b = 0;
+	c = 0;
+	if(a)
+	{
+		b = 1;
+	}
+	else
+	{
+		c = 1;
+	}
+}

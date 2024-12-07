@@ -98,6 +98,7 @@ class symbolTable():
 
 class semanticAnalyzer():
     def construct_symbol_table(self, node: 'S_node') -> symbolTable:
+        # TODO: the statement following if/else/for/while cannot be a declaration
         def construct_st_dfs(node: 'ptnode', scope: int, st: symbolTable) -> semanticError:
             node.scope = scope # annotate scope information in the AST
             err = None

@@ -26,19 +26,21 @@ class instruction():
 class basicBlock():
     def __init__(self):
         self.instructions = []
-        self.next1 = None
-        self.next2 = None
-        self.branch = False # IFELSE
+        self.next = None
 
 class loopBlock():
     def __init__(self):
-        self.firstblock = None
-        self.lastblock = None # should contain loop condition checking
+        self.firstblock = None # check loop condition before entering
+        self.secondblock = None # the first block in the loop body
+        self.lastblock = None # check loop condition after 1 iteration
+        self.next = None
 
 class branchBlock():
     def __init__(self):
         self.firstblock = None # should contain condition evaluation
-        self.lastblock = None # the merge point
+        self.thenblock = None # first block in then
+        self.elseblock = None # first block in else
+        self.next = None
 
 class IRgenerator():
     def assign_addr(self, st: symbolTable) -> ('data section usage', 'stack usage'):
@@ -68,28 +70,29 @@ class IRgenerator():
 
     # convert each function to a control flow graph
     def AST2IR(self, node: 'S_node', st: symbolTable, stack_len: int) -> (basicBlock, 'new_stack_len'):
-        cond_reg = memcell('cond', 0, 1)
+        cond_reg = memcell('reg_cond', 0, 1)
+        cond_creg = memcell('creg_cond', 0, 1)
         def STMTLIST2IR(node: 'STMTLIST_node', st: symbolTable, stack_len: int) -> ('firstblock', 'lastblock', 'new_stack_len'):
             firstblock = basicBlock()
             lastblock = firstblock
             stack_len_max = stack_len
+            new_stack_len = stack_len
             for child in node.children:
                 if child.name == 'CPDSTMT':
                     if len(child.children) > 0:
                         new_fb, new_lb, new_stack_len = STMTLIST2IR(child.children[0], st, stack_len)
                         lastblock.next1 = new_fb
                         lastblock = new_lb
-                        stack_len_max = max(stack_len_max, new_stack_len)
                 if child.name == 'EXPRSTMT':
                     # the value of the expression is not needed
                     instructions, new_stack_len, _ = EXPR2IR(child.children[0], st, stack_len)
                     lastblock.instructions += instructions
-                    stack_len_max = max(stack_len_max, new_stack_len)
                 if child.name == 'IFELSE':
-                    new_last_block, new_stack_len = IFELSE2IR(child, st, stack_len)
-                    # create a new last block and point the last blocks of ifelse to the new last block
-                    lastblock.next1 = new_last_block
-                    lastblock = new_last_block
+                    ifelse_block, new_stack_len = IFELSE2IR(child, st, stack_len)
+                    lastblock.next = ifelse_block
+                    # create a new last block and point the next of the ifelse block to the new last block
+                    lastblock = basicBlock()
+                    ifelse_block.next = lastblock
                     pass
                 if child.name == 'FOR':
                     # treat loop as one single block
@@ -99,9 +102,8 @@ class IRgenerator():
                     pass
                 if child.name == 'JMP':
                     pass
+                stack_len_max = max(stack_len_max, new_stack_len)
             return firstblock, lastblock, stack_len_max
-
-        # TODO: first write EXPR2IR and its required functions
 
         # evaluate an expression, allocate temporary variables, return the temporary variable that contains the result
         # for these functions, if the returned memcell is a temporary, its starting address must equal to the stack_len argument.
@@ -142,8 +144,6 @@ class IRgenerator():
             lhs, operator, rhs = node.children
             stack_len_max = stack_len
 
-            print('calling BINARY2IR on', node.name)
-            print('stack len =', stack_len)
             # if is assignment operator, do not need to create temporary for result            
             # otherwise allocate temp memory cell for result
             # use the lowest possible offset
@@ -151,7 +151,7 @@ class IRgenerator():
             if operator.value not in assignment_ops:
                 t_result = memcell('stack', stack_len, node.size)
                 stack_len += node.size
-            # TODO: can reuse temp according to type of operation.
+            # FUTURE todo: can reuse temp according to type of operation.
             # for example, if we want to compute t1 + t2, we don't need to create a new t_result, we can just use t1 to hold the sum, i.e. t1 = t1 + t2.
             # This depends on whether the machine instruction allows in-place operation.
             # for now just make things simple
@@ -199,11 +199,12 @@ class IRgenerator():
                 insts.append(instruction('mul_ex', [t1_ext, t2_ext, t_result]))
             elif operator.value == '=':
                 insts.append(instruction('copy', [t2_ext, t1])) # t_result = t1 here
+            # TODO: add more operators
 
             return insts, stack_len_max, t_result
 
-        def UNARY2IR(node: 'BINARY_node', st: symbolTable, stack_len: int) -> (['instruction'], 'new_stack_len', 'temp memcell'):
-            pass
+        def UNARY2IR(node: 'UNARY_node', st: symbolTable, stack_len: int) -> (['instruction'], 'new_stack_len', 'temp memcell'):
+            pass # TODO
 
         def IFELSE2IR(node: 'IFELSE_node', st: symbolTable, stack_len: int) -> ('branchBlock', 'new_stack_len'):
             ret = branchBlock()
@@ -216,22 +217,21 @@ class IRgenerator():
             ret.firstblock.instructions += instructions
             # store the evaluated bit to cond register
             ret.firstblock.instructions.append(instruction('tobool', tempvar, cond_reg))
+            ret.firstblock.instructions.append(instruction('measure', cond_reg, cond_creg))
             stack_len_max = max(stack_len, new_stack_len)
             ret.firstblock.branch = True
 
             # evaluate if body
-            if_body = node.children[1]
-            if_fb, if_lb, new_stack_len = STMT2IR(if_body, st, stack_len)
-            ret.firstblock.next1 = if_fb
-            if_lb.next1 = ret.lastblock
+            then_body = node.children[1]
+            then_fb, then_lb, new_stack_len = STMT2IR(then_body, st, stack_len)
+            ret.thenblock = then_fb
             stack_len_max = max(stack_len_max, new_stack_len)
 
             # evaluate else body
             if len(node.children) == 3:
                 else_body = node.children[2]
                 else_fb, else_lb, new_stack_len = STMT2IR(else_body, st, stack_len)
-                ret.firstblock.next2 = else_fb
-                else_lb.next1 = ret.lastblock
+                ret.elseblock = else_fb
                 stack_len_max = max(stack_len_max, new_stack_len)
             
             return ret, stack_len_max
@@ -253,10 +253,32 @@ def print_st(st: symbolTable, scope_num = 0, depth = 0):
     for new_scope_num in st.children[scope_num]:
         print_st(st, new_scope_num, depth + 1)
 
-def print_CFG(blk: basicBlock):
-    for i in blk.instructions:
-        print(i)
-    
+def print_CFG(blk):
+    def print_basic(blk: basicBlock):
+        print('Basic Block')
+        for i in blk.instructions:
+            print(i)
+        
+    def print_branch(blk: branchBlock):
+        print('IF')
+        print_basic(blk.firstblock)
+        print_CFG(blk.thenblock)
+        if blk.elseblock != None:
+            print('ELSE')
+            print_branch(blk.elseblock)
+        print('ENDIF')
+
+    def print_loop(blk: loopBlock):
+        pass
+
+    while blk != None:
+        if type(blk) == basicBlock:
+            print_basic(blk)
+        if type(blk) == branchBlock:
+            print_branch(blk)
+        if type(blk) == loopBlock:
+            print_loop(blk)
+        blk = blk.next
 
 def main():
     import sys

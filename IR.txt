@@ -18,6 +18,9 @@ le
 ge
 eq
 
+sl
+sr
+
 tobool r1, r2 (r2 must be 1 bit)
 
 assign r1, immediate (r1 = immediate, automatic extension and truncation)

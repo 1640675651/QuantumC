@@ -1,0 +1,6 @@
+// test error handling
+void main()
+{
+	int8 a;
+	5 += a;
+}

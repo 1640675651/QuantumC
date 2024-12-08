@@ -1,10 +1,10 @@
 // basic sequential block
 void main()
 {
-	int8 a;
-	a = 1;
-	int8 b;
-	b = 2;
-	int8 c;
-	c = a + b;
+	int4 a;
+	a = 3;
+	int4 b;
+	b = 7;
+	int4 c;
+	c = b - a;
 }

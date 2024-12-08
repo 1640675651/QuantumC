@@ -1,7 +1,7 @@
 // test branch block
 void main()
 {
-	int8 a; int8 b; int8 c;
+	int4 a; int4 b; int4 c;
 	a = 1;
 	b = 0;
 	c = 0;

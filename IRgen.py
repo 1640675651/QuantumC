@@ -15,6 +15,9 @@ class memcell():
         return f'({self.segment}, {self.offset}, {self.size})'
     def __repr__(self):
         return str(self)
+    # get a bit in this memcell
+    def __getitem__(self, index) -> str:
+        return f'{self.segment}[{self.offset+index}]'
 
 class instruction():
     def __init__(self, name, operands):
@@ -70,8 +73,8 @@ class IRgenerator():
 
     # convert each function to a control flow graph
     def AST2IR(self, node: 'S_node', st: symbolTable, stack_len: int) -> (basicBlock, 'new_stack_len'):
-        cond_reg = memcell('reg_cond', 0, 1)
-        cond_creg = memcell('creg_cond', 0, 1)
+        cond_reg = memcell('cond_reg', 0, 1)
+        cond_creg = memcell('cond_creg', 0, 1)
         def STMTLIST2IR(node: 'STMTLIST_node', st: symbolTable, stack_len: int) -> ('firstblock', 'lastblock', 'new_stack_len'):
             firstblock = basicBlock()
             lastblock = firstblock
@@ -327,6 +330,8 @@ def print_CFG(blk, depth = 0):
         print_basic(blk.firstblock, depth+1)
         print('\t'*depth + 'BODY')
         print_CFG(blk.bodyblock, depth+1)
+        print('\t'*depth + 'WHILE COND CHECK')
+        print_CFG(blk.lastblock, depth+1)
         print('\t'*depth +'ENDWHILE')
 
     while blk != None:

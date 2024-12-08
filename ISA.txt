@@ -1,6 +1,9 @@
-each register is represented by (segment, starting index, length)
+Each register is represented by (segment, offset, length)
+e.g. ('stack', 4, 4) means stack[4:8]
+All values in little endian. LSB in low offset.
 
-add r1, r2 (r2 = r1 + r2, len(r2) must = len(r1))
+Arithmetic instructions. Register size must match. 
+add r1, r2 (r2 = r1 + r2)
 sub r1, r2 (r2 = r1 - r2)
 
 add_ex r1, r2, r3 (r3 = r1 + r2, len(r3) must = len(r1), len(r2))
@@ -21,6 +24,7 @@ eq
 sl
 sr
 
+Special instructions. Register size can be different.
 tobool r1, r2 (r2 must be 1 bit)
 
 assign r1, immediate (r1 = immediate, automatic extension and truncation)

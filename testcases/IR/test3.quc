@@ -1,7 +1,7 @@
 // test while loop
 void main()
 {
-	int8 a; int8 b; 
+	int4 a; int4 b; 
 	a = 5;
 	b = 0;
 	while(a)

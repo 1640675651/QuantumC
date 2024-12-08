@@ -31,7 +31,7 @@ class basicBlock():
 class loopBlock():
     def __init__(self):
         self.firstblock = None # check loop condition before entering
-        self.secondblock = None # the first block in the loop body
+        self.bodyblock = None # the first block in the loop body
         self.lastblock = None # check loop condition after 1 iteration
         self.next = None
 
@@ -100,7 +100,11 @@ class IRgenerator():
                     # treat loop as one single block
                     pass
                 if child.name == 'WHILE':
-                    # treat loop as one single block
+                    while_block, new_stack_len = WHILE2IR(child, st, stack_len)
+                    lastblock.next = while_block
+                    # create a new last block and point the next of the ifelse block to the new last block
+                    lastblock = basicBlock()
+                    while_block.next = lastblock
                     pass
                 if child.name == 'JMP':
                     pass
@@ -109,12 +113,12 @@ class IRgenerator():
 
         def STMT2IR(node: 'CPDSTMT/EXPRSTMT/IFELSE/FOR/WHILE/JMP', st: symbolTable, stack_len: int) -> ('firstblock', 'lastblock', 'new_stack_len'):
             # construct a dummy STMTLIST node and reuse STMTLIST2IR
-            print('calling STMT2IR')
+            #print('calling STMT2IR')
             dummy = STMTLIST_node([])
             dummy.children.append(node)
             fb, lb, nsl = STMTLIST2IR(dummy, st, stack_len)
-            print(fb.instructions)
-            print(lb.instructions)
+            #print(fb.instructions)
+            #print(lb.instructions)
             return STMTLIST2IR(dummy, st, stack_len)
 
         # evaluate an expression, allocate temporary variables, return the temporary variable that contains the result
@@ -208,9 +212,21 @@ class IRgenerator():
             elif operator.value == '*':
                 insts.append(instruction('mul_ex', [t1_ext, t2_ext, t_result]))
             elif operator.value == '/':
-                insts.append(instruction('mul_ex', [t1_ext, t2_ext, t_result]))
+                insts.append(instruction('div_ex', [t1_ext, t2_ext, t_result]))
+            elif operator.value == '%':
+                insts.append(instruction('mod_ex', [t1_ext, t2_ext, t_result]))
             elif operator.value == '=':
                 insts.append(instruction('copy', [t2_ext, t1])) # t_result = t1 here
+            elif operator.value == '==':
+                insts.append(instruction('eq', [t1_ext, t2_ext, t_result]))
+            elif operator.value == '>':
+                insts.append(instruction('gt', [t1_ext, t2_ext, t_result]))
+            elif operator.value == '<':
+                insts.append(instruction('lt', [t1_ext, t2_ext, t_result]))
+            elif operator.value == '>=':
+                insts.append(instruction('ge', [t1_ext, t2_ext, t_result]))
+            elif operator.value == '<=':
+                insts.append(instruction('le', [t1_ext, t2_ext, t_result]))
             # TODO: add more operators
 
             return insts, stack_len_max, t_result
@@ -218,7 +234,7 @@ class IRgenerator():
         def UNARY2IR(node: 'UNARY_node', st: symbolTable, stack_len: int) -> (['instruction'], 'new_stack_len', 'temp memcell'):
             pass # TODO
 
-        def IFELSE2IR(node: 'IFELSE_node', st: symbolTable, stack_len: int) -> ('branchBlock', 'new_stack_len'):
+        def IFELSE2IR(node: 'IFELSE_node', st: symbolTable, stack_len: int) -> (branchBlock, 'new_stack_len'):
             ret = branchBlock()
             ret.firstblock = basicBlock()
             
@@ -230,21 +246,46 @@ class IRgenerator():
             ret.firstblock.instructions.append(instruction('tobool', [tempvar, cond_reg]))
             ret.firstblock.instructions.append(instruction('measure', [cond_reg, cond_creg]))
             stack_len_max = max(stack_len, new_stack_len)
-            ret.firstblock.branch = True
 
-            # evaluate then body
+            # generate then body
             then_body = node.children[1]
             then_fb, then_lb, new_stack_len = STMT2IR(then_body, st, stack_len)
             ret.thenblock = then_fb
             stack_len_max = max(stack_len_max, new_stack_len)
 
-            # evaluate else body
+            # generate else body
             if len(node.children) == 3:
                 else_body = node.children[2]
                 else_fb, else_lb, new_stack_len = STMT2IR(else_body, st, stack_len)
                 ret.elseblock = else_fb
                 stack_len_max = max(stack_len_max, new_stack_len)
             
+            return ret, stack_len_max
+
+        def WHILE2IR(node: 'WHILE_node', st: symbolTable, stack_len: int) -> (loopBlock, 'new_stack_len'):
+            ret = loopBlock()
+            ret.firstblock = basicBlock()
+            ret.lastblock = basicBlock()
+
+            # evaluate condition EXPR
+            condexpr = node.children[0]
+            cond_insts, new_stack_len, tempvar = EXPR2IR(condexpr, st, stack_len)
+            # store the evaluated bit to cond register
+            cond_insts.append(instruction('tobool', [tempvar, cond_reg]))
+            cond_insts.append(instruction('measure', [cond_reg, cond_creg]))
+            ret.firstblock.instructions += cond_insts
+            stack_len_max = max(stack_len, new_stack_len)
+
+            # generate loop body
+            loop_body = node.children[1]
+            body_fb, body_lb, new_stack_len = STMT2IR(loop_body, st, stack_len)
+            ret.bodyblock = body_fb
+            stack_len_max = max(stack_len, new_stack_len)
+
+            # check loop condition after each iteration
+            # same instructions as the first check
+            ret.lastblock.instructions = ret.firstblock.instructions
+
             return ret, stack_len_max
 
         for decl in node.children[0].children:
@@ -272,7 +313,7 @@ def print_CFG(blk, depth = 0):
             print(i)
         
     def print_branch(blk: branchBlock, depth):
-        print('\t'*depth + 'IF COND')
+        print('\t'*depth + 'IF')
         print_basic(blk.firstblock, depth+1)
         print('\t'*depth + 'THEN')
         print_CFG(blk.thenblock, depth+1)
@@ -282,7 +323,11 @@ def print_CFG(blk, depth = 0):
         print('\t'*depth +'ENDIF')
 
     def print_loop(blk: loopBlock, depth):
-        pass
+        print('\t'*depth + 'WHILE')
+        print_basic(blk.firstblock, depth+1)
+        print('\t'*depth + 'BODY')
+        print_CFG(blk.bodyblock, depth+1)
+        print('\t'*depth +'ENDWHILE')
 
     while blk != None:
         if type(blk) == basicBlock:

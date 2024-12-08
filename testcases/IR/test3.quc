@@ -1,0 +1,12 @@
+// test while loop
+void main()
+{
+	int8 a; int8 b; 
+	a = 5;
+	b = 0;
+	while(a)
+	{
+		b = b + 1;
+		a = a - 1;
+	}
+}

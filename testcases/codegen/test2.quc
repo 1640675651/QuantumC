@@ -1,0 +1,13 @@
+// test comparison
+void main()
+{
+	int4 a; int4 b; 
+	a = 2;
+	b = 2;
+	print(a < b);
+	print(a > b);
+	print(a <= b);
+	print(a >= b);
+	print(a == b);
+	print(a != b);
+}

@@ -1,6 +1,6 @@
 from IRgen import instruction, memcell
 
-# single bit operations
+# 1. single bit operations (for those with output bit, assume the bit is set to 0)
 
 def x(b) -> list:
     return [f'x {b};']
@@ -13,15 +13,6 @@ def cx(b1, b2) -> list:
 
 def reset(b) -> list:
     return [f'reset {b};']
-
-# register operations
-
-def measure(q: memcell, c: memcell):
-    code = []
-    n = q.size
-    for i in range(n):
-        code.append(f'{c[i]} = measure {q[i]};')
-    return code
 
 # c = a | b = ~(~a & ~b), Demorgan's law
 def bit_or(a: str, b: str, c: str) -> list:
@@ -37,24 +28,24 @@ def xor(cin: str, a: str, b: str) -> list:
 def nor(a: str, b: str, c: str) -> list:
     return x(a) + x(b) + ccx(a, b, c) + x(a) + x(b)
 
-# bit-wise operations
+# 2. bit-wise operations (for those with output bits, assume the bits are set to 0)
 
 # c = a & b
-def bitwise_and(a, b, c):
+def bitwise_and(a, b, c) -> list:
     code = []
     n = a.size
     for i in range(n):
         code += ccx(a[i], b[i], c[i])
     return code
 
-def bitwise_not(a):
+def bitwise_not(a) -> list:
     code = []
     for i in range(a.size):
         code += x(a[i])
     return code
 
 # c = ~a
-def bitwise_not_ex(a, c):
+def bitwise_not_ex(a, c) -> list:
     code = []
     n = a.size
     # copy then negate
@@ -63,9 +54,17 @@ def bitwise_not_ex(a, c):
         code += x(c[i])
     return x
 
+# c = a ^ b
+def bitwise_xor(a, b, c) -> list:
+    code = []
+    n = a.size
+    for i in range(n):
+        code += xor(a[i], b[i], c[i])
+    return code
+
 # A NOR B = (~A) & (~B)
 # c = a nor b
-def bitwise_nor(a, b, c):
+def bitwise_nor(a, b, c) -> list:
     code = []
     n = a.size
     
@@ -79,7 +78,7 @@ def bitwise_nor(a, b, c):
     code += bitwise_not(b)
     return code
 
-
+# 3. arithmetic operations
 
 # cin, a, b, cout are bits
 def carry(cin: str, a: str, b: str, cout: str) -> list:
@@ -92,7 +91,7 @@ def carry_dg(cin: str, a: str, b: str, cout: str) -> list:
 # b = a + b
 # c is carry register
 # c will be 0 after the computation, so no need to reset it
-def inst_add(a: memcell, b: memcell, c: memcell) -> str:
+def inst_add(a: memcell, b: memcell, c: memcell) -> list:
     code = []
     n = a.size
     # reset carry
@@ -117,7 +116,7 @@ def inst_add(a: memcell, b: memcell, c: memcell) -> str:
     return code
 
 # s = a + b
-def inst_add_ex(a, b, s, c) -> str:
+def inst_add_ex(a, b, s, c) -> list:
     code = []
     n = a.size
     # reset s
@@ -131,7 +130,7 @@ def inst_add_ex(a, b, s, c) -> str:
 
 # b = a - b
 # add a to 2's complement of b.
-def inst_sub(a, b, c):
+def inst_sub(a, b, c) -> list:
     code = []
     n = a.size
     # reset carry
@@ -167,7 +166,7 @@ def inst_sub(a, b, c):
     return code
 
 # s = a - b
-def inst_sub_ex(a, b, s, c) -> str:
+def inst_sub_ex(a, b, s, c) -> list:
     code = []
     n = a.size
     # reset s
@@ -178,6 +177,103 @@ def inst_sub_ex(a, b, s, c) -> str:
         code += cx(b[i], s[i])
     code += inst_sub(a, s, c)
     return code
+
+# 4. comparison operations
+# c = (a < b)
+def lt(a, b, c) -> list:
+    code = []
+    n = a.size
+
+    # calculate a-b, store to c
+    code += inst_sub_ex(a, b, c, memcell('carry_reg', 0, n))
+
+    # reset c's LSB
+    code += reset(c[0])
+    # if sign bit = 1, a - b < 0, a < b. sign bit is the return value.
+    # copy c's sign bit (MSB) to its LSB. 
+    code += cx(c[c.size-1], c[0])
+
+    # reset c except LSB
+    for i in range(1, c.size, 1):
+        code += reset(c[i])
+    
+    return code
+
+# c = (a >= b)
+# negate the value of lt
+def ge(a, b, c) -> list:
+    code = []
+    code += lt(a, b, c)
+    code += x(c[0])
+    return code
+
+# c = (a > b)
+def gt(a, b, c) -> list:
+    code = []
+    n = a.size
+
+    # calculate b - a, store to c
+    code += inst_sub_ex(b, a, c, memcell('carry_reg', 0, n))
+
+    # reset c's LSB
+    code += reset(c[0])
+    # if sign bit = 1, b - a < 0, a > b. sign bit is the return value.
+    # copy c's sign bit (MSB) to its LSB. 
+    code += cx(c[c.size-1], c[0])
+
+    # reset c except LSB
+    for i in range(1, c.size, 1):
+        code += reset(c[i])
+    
+    return code
+
+# c = (a <= b)
+# negate the value of gt
+def le(a, b, c) -> list:
+    code = []
+    code += gt(a, b, c)
+    code += x(c[0])
+    return code
+
+# c = (a == b)
+# if a == b, a xor b = all 0. 
+# if a != b, a xor b contains 1. 
+# convert a xor b to bool and negate is the output.
+# 2 tmp bit used.
+def eq(a, b, c) -> list:
+    code = []
+    # reset c
+    for i in range(c.size):
+        code += reset(c[i])
+
+    # c = a xor b
+    code += bitwise_xor(a, b, c)
+
+    tmp_reg = memcell('tmp_reg', 0, 2)
+    # convert c to boolean, store into tmp_reg[1]
+    code += tobool(c, memcell('tmp_reg', 1, 1))
+
+    # negate tmp_reg[1]
+    code += x(tmp_reg[1])
+
+    # reset c
+    for i in range(c.size):
+        code += reset(c[i])
+
+    # store tmp_reg[1] to the LSB of c
+    code += cx(tmp_reg[1], c[0])
+
+    return code
+
+# c = (a != b)
+# just need to negate the LSB of (a == b)
+def ne(a, b, c) -> list:
+    code = []
+    code += eq(a, b, c)
+    code += x(c[0])
+    return code
+
+# 5. misc operations
 
 # b = a
 def copy(a, b) -> str:
@@ -255,4 +351,11 @@ def tobool(a, b) -> str:
         code += reset(or_in)
     
     # tmp_reg[0] will be reset in the end
+    return code
+
+def measure(q: memcell, c: memcell):
+    code = []
+    n = q.size
+    for i in range(n):
+        code.append(f'{c[i]} = measure {q[i]};')
     return code

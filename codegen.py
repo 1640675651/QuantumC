@@ -11,6 +11,7 @@ class codegenerator():
         self.cond_reg_usage = 0
 
     def inst2qasm(self, inst: instruction) -> list:
+        # arithmetic operations need the carry register
         if inst.name == 'add':
             size = inst.operands[0].size
             self.carry_reg_usage = max(self.carry_reg_usage, size)
@@ -35,6 +36,30 @@ class codegenerator():
             # tobool will use 1 tmp bit
             self.tmp_reg_usage = max(self.tmp_reg_usage, 1)
             return tobool(inst.operands[0], inst.operands[1])
+        # comparison operation are implemented through subtraction, which uses the carry register
+        elif inst.name == 'lt':
+            size = inst.operands[0].size
+            self.carry_reg_usage = max(self.carry_reg_usage, size)
+            return lt(inst.operands[0], inst.operands[1], inst.operands[2])
+        elif inst.name == 'gt':
+            size = inst.operands[0].size
+            self.carry_reg_usage = max(self.carry_reg_usage, size)
+            return gt(inst.operands[0], inst.operands[1], inst.operands[2])
+        elif inst.name == 'le':
+            size = inst.operands[0].size
+            self.carry_reg_usage = max(self.carry_reg_usage, size)
+            return le(inst.operands[0], inst.operands[1], inst.operands[2])
+        elif inst.name == 'ge':
+            size = inst.operands[0].size
+            self.carry_reg_usage = max(self.carry_reg_usage, size)
+            return ge(inst.operands[0], inst.operands[1], inst.operands[2])
+        # eq and ne will use 2 tmp bits    
+        elif inst.name == 'eq':
+            self.tmp_reg_usage = max(self.tmp_reg_usage, 2)
+            return eq(inst.operands[0], inst.operands[1], inst.operands[2])
+        elif inst.name == 'ne':
+            self.tmp_reg_usage = max(self.tmp_reg_usage, 2)
+            return ne(inst.operands[0], inst.operands[1], inst.operands[2])
         elif inst.name == 'measure':
             return measure(inst.operands[0], inst.operands[1])
 

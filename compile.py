@@ -10,14 +10,14 @@ def main():
         print('usage: compile.py sourcefile')
         return
 
-    file = open(sys.argv[1])
+    sourcefile = open(sys.argv[1])
     
     # lexical analysis
     l = lexer()
-    err, tokens = l.run(file)
+    err, tokens = l.run(sourcefile)
     if err:
         print(tokens)
-        file.close()
+        sourcefile.close()
         return
     
     # syntactical analysis
@@ -25,7 +25,7 @@ def main():
     err, root = p.run(tokens)
     if err != None:
         print(err)
-        file.close()
+        sourcefile.close()
         return
 
     # semantic analysis
@@ -33,7 +33,7 @@ def main():
     err, st = s.run(root)
     if err != None:
         print(err)
-        file.close()
+        sourcefile.close()
         return
 
     # intermediate representation
@@ -44,7 +44,10 @@ def main():
     codegen = codegenerator()
     code = codegen.run(firstblock, data_len, stack_len, cregs)
 
-    print(code)
-    file.close()
+    output_file = open('out.qasm3', 'w')
+    #print(code)
+    output_file.write(code)
+    sourcefile.close()
+    output_file.close()
 
 main()

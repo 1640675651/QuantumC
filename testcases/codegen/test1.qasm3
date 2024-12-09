@@ -1,0 +1,195 @@
+OPENQASM 3.0;
+include "stdgates.inc";
+qubit[1] tmp_reg;
+qubit[4] carry_reg;
+qubit[1] cond_reg;
+qubit[20] stack;
+bit[1] cond_creg;
+bit[4] print_creg_0;
+
+//assign [(stack, 16, 4), 1]
+reset stack[16];
+reset stack[17];
+reset stack[18];
+reset stack[19];
+x stack[16];
+//copy [(stack, 16, 4), (stack, 0, 4)]
+reset stack[0];
+reset stack[1];
+reset stack[2];
+reset stack[3];
+cx stack[16], stack[0];
+cx stack[17], stack[1];
+cx stack[18], stack[2];
+cx stack[19], stack[3];
+//assign [(stack, 16, 4), 1]
+reset stack[16];
+reset stack[17];
+reset stack[18];
+reset stack[19];
+x stack[16];
+//copy [(stack, 16, 4), (stack, 4, 4)]
+reset stack[4];
+reset stack[5];
+reset stack[6];
+reset stack[7];
+cx stack[16], stack[4];
+cx stack[17], stack[5];
+cx stack[18], stack[6];
+cx stack[19], stack[7];
+//assign [(stack, 16, 4), 0]
+reset stack[16];
+reset stack[17];
+reset stack[18];
+reset stack[19];
+//copy [(stack, 16, 4), (stack, 8, 4)]
+reset stack[8];
+reset stack[9];
+reset stack[10];
+reset stack[11];
+cx stack[16], stack[8];
+cx stack[17], stack[9];
+cx stack[18], stack[10];
+cx stack[19], stack[11];
+//assign [(stack, 16, 4), 5]
+reset stack[16];
+reset stack[17];
+reset stack[18];
+reset stack[19];
+x stack[16];
+x stack[18];
+//copy [(stack, 16, 4), (stack, 12, 4)]
+reset stack[12];
+reset stack[13];
+reset stack[14];
+reset stack[15];
+cx stack[16], stack[12];
+cx stack[17], stack[13];
+cx stack[18], stack[14];
+cx stack[19], stack[15];
+
+//tobool [(stack, 12, 4), (cond_reg, 0, 1)]
+reset cond_reg[0];
+x stack[12];
+x stack[13];
+ccx stack[12], stack[13], cond_reg[0];
+x cond_reg[0];
+x stack[12];
+x stack[13];
+x stack[14];
+x cond_reg[0];
+ccx stack[14], cond_reg[0], tmp_reg[0];
+x tmp_reg[0];
+x stack[14];
+x cond_reg[0];
+reset cond_reg[0];
+x stack[15];
+x tmp_reg[0];
+ccx stack[15], tmp_reg[0], cond_reg[0];
+x cond_reg[0];
+x stack[15];
+x tmp_reg[0];
+reset tmp_reg[0];
+//measure [(cond_reg, 0, 1), (cond_creg, 0, 1)]
+cond_creg[0] = measure cond_reg[0];
+while(cond_creg == 1)
+{
+	//add_ex [(stack, 0, 4), (stack, 4, 4), (stack, 16, 4)]
+	reset stack[16];
+	reset stack[17];
+	reset stack[18];
+	reset stack[19];
+	cx stack[4], stack[16];
+	cx stack[5], stack[17];
+	cx stack[6], stack[18];
+	cx stack[7], stack[19];
+	ccx stack[0], stack[16], carry_reg[1];
+	cx stack[0], stack[16];
+	ccx carry_reg[0], stack[16], carry_reg[1];
+	ccx stack[1], stack[17], carry_reg[2];
+	cx stack[1], stack[17];
+	ccx carry_reg[1], stack[17], carry_reg[2];
+	ccx stack[2], stack[18], carry_reg[3];
+	cx stack[2], stack[18];
+	ccx carry_reg[2], stack[18], carry_reg[3];
+	cx carry_reg[3], stack[19];
+	ccx carry_reg[2], stack[18], carry_reg[3];
+	cx stack[2], stack[18];
+	ccx stack[2], stack[18], carry_reg[3];
+	cx stack[2], stack[18];
+	cx carry_reg[2], stack[18];
+	ccx carry_reg[1], stack[17], carry_reg[2];
+	cx stack[1], stack[17];
+	ccx stack[1], stack[17], carry_reg[2];
+	cx stack[1], stack[17];
+	cx carry_reg[1], stack[17];
+	ccx carry_reg[0], stack[16], carry_reg[1];
+	cx stack[0], stack[16];
+	ccx stack[0], stack[16], carry_reg[1];
+	cx stack[0], stack[16];
+	cx carry_reg[0], stack[16];
+	//copy [(stack, 16, 4), (stack, 8, 4)]
+	reset stack[8];
+	reset stack[9];
+	reset stack[10];
+	reset stack[11];
+	cx stack[16], stack[8];
+	cx stack[17], stack[9];
+	cx stack[18], stack[10];
+	cx stack[19], stack[11];
+	//copy [(stack, 4, 4), (stack, 0, 4)]
+	reset stack[0];
+	reset stack[1];
+	reset stack[2];
+	reset stack[3];
+	cx stack[4], stack[0];
+	cx stack[5], stack[1];
+	cx stack[6], stack[2];
+	cx stack[7], stack[3];
+	//copy [(stack, 8, 4), (stack, 4, 4)]
+	reset stack[4];
+	reset stack[5];
+	reset stack[6];
+	reset stack[7];
+	cx stack[8], stack[4];
+	cx stack[9], stack[5];
+	cx stack[10], stack[6];
+	cx stack[11], stack[7];
+	//assign [(stack, 16, 4), 1]
+	reset stack[16];
+	reset stack[17];
+	reset stack[18];
+	reset stack[19];
+	x stack[16];
+
+	//tobool [(stack, 12, 4), (cond_reg, 0, 1)]
+	reset cond_reg[0];
+	x stack[12];
+	x stack[13];
+	ccx stack[12], stack[13], cond_reg[0];
+	x cond_reg[0];
+	x stack[12];
+	x stack[13];
+	x stack[14];
+	x cond_reg[0];
+	ccx stack[14], cond_reg[0], tmp_reg[0];
+	x tmp_reg[0];
+	x stack[14];
+	x cond_reg[0];
+	reset cond_reg[0];
+	x stack[15];
+	x tmp_reg[0];
+	ccx stack[15], tmp_reg[0], cond_reg[0];
+	x cond_reg[0];
+	x stack[15];
+	x tmp_reg[0];
+	reset tmp_reg[0];
+	//measure [(cond_reg, 0, 1), (cond_creg, 0, 1)]
+	cond_creg[0] = measure cond_reg[0];
+}
+//measure [(stack, 8, 4), (print_creg_0, 0, 4)]
+print_creg_0[0] = measure stack[8];
+print_creg_0[1] = measure stack[9];
+print_creg_0[2] = measure stack[10];
+print_creg_0[3] = measure stack[11];
+

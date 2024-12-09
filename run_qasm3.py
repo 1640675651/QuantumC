@@ -1,9 +1,10 @@
 # Import the Qiskit SDK
 from qiskit import QuantumCircuit, ClassicalRegister, QuantumRegister, transpile
 from qiskit.circuit import Parameter
-from qiskit_aer import AerSimulator
+from qiskit_aer import AerSimulator, Aer
 from qiskit.qasm3 import load
 import sys
+from timeit import timeit
 
 def dict_key_b2d(d: dict):
     newd = {}
@@ -17,11 +18,21 @@ def dict_key_b2d(d: dict):
 
 qc = load(sys.argv[1])
 
-#backend_sim = AerSimulator(method = 'matrix_product_state')
-backend_sim = AerSimulator(method = 'statevector')
+backend_sim = AerSimulator(max_parallel_threads=24, method='statevector')
+#backend_sim = Aer.get_backend('qasm_simulator')
 isa_qc = transpile(qc, backend_sim)
+#quantum_instance = QuantumInstance(backend_sim, progress_bar=ProgressBar())
 #print(isa_qc.depth())
 
-job_sim = backend_sim.run(qc, shots=1)
-result_sim = job_sim.result()
-print(dict_key_b2d(result_sim.get_counts()))
+def run():
+    job_sim = backend_sim.run(qc, shots=1)
+    result_sim = job_sim.result()
+    print(dict_key_b2d(result_sim.get_counts()))
+
+t = timeit(run, number = 1)
+
+print('time used:', t, 's')
+
+# job_sim = backend_sim.run(qc, shots=1)
+# result_sim = job_sim.result()
+# print(dict_key_b2d(result_sim.get_counts()))

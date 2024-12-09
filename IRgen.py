@@ -226,6 +226,8 @@ class IRgenerator():
                 insts.append(instruction('copy', [t2_ext, t1])) # t_result = t1 here
             elif operator.value == '==':
                 insts.append(instruction('eq', [t1_ext, t2_ext, t_result]))
+            elif operator.value == '!=':
+                insts.append(instruction('ne', [t1_ext, t2_ext, t_result]))
             elif operator.value == '>':
                 insts.append(instruction('gt', [t1_ext, t2_ext, t_result]))
             elif operator.value == '<':
@@ -255,7 +257,7 @@ class IRgenerator():
                     argvars.append(t)
                     stack_len_max = max(stack_len_max, new_stack_len)
                     if type(arg.children[0]) == token or arg.children[0].name != 'ACCESS':
-                        stack_len += t1.size
+                        stack_len += t.size
                         stack_len_max = max(stack_len_max, stack_len)
 
                 # measure

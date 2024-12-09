@@ -1,0 +1,17 @@
+// 7th term of the fibonacci series
+void main()
+{
+	int4 a; int4 b; int4 c; int4 i;
+	a = 1;
+	b = 1;
+	c = 0;
+	i = 5;
+	while(i)
+	{
+		c = a + b;
+		a = b;
+		b = c;
+		i = i - 1;
+	}
+	print(c);
+}

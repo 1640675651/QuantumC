@@ -92,7 +92,7 @@ class codegenerator():
         return code
 
     # generate register definition
-    def gen_regdef(self, data_len: int, stack_len: int):
+    def gen_regdef(self, data_len: int, stack_len: int, cregs: list):
         code = ''
         if self.tmp_reg_usage > 0:
             code += f'qubit[{self.tmp_reg_usage}] tmp_reg;\n'
@@ -100,20 +100,25 @@ class codegenerator():
             code += f'qubit[{self.carry_reg_usage}] carry_reg;\n'
         if self.cond_reg_usage > 0:
             code += f'qubit[{self.cond_reg_usage}] cond_reg;\n'
-            code += f'bit[{self.cond_reg_usage}] cond_creg;\n'
+
         if data_len > 0:
             code += f'qubit[{data_len}] data;\n'
         if stack_len > 0:
             code += f'qubit[{stack_len}] stack;\n'
+
+        # always have classical condition register, to make output order consistent
+        code += f'bit[1] cond_creg;\n'
+        for creg in cregs:
+            code += f'bit[{creg.size}] {creg.segment};\n'
         return code
 
-    def run(self, blk: basicBlock, data_len: int, stack_len: int) -> str:
+    def run(self, blk: basicBlock, data_len: int, stack_len: int, cregs: list) -> str:
         # maybe generate register definition after scanning the IR,
         # to determine the size of some registers and classical registers
         header = 'OPENQASM 3.0;\ninclude "stdgates.inc";\n'
 
         # need to call gencode first to determine register usage
         code = self.gencode(blk, 0)
-        regdef = self.gen_regdef(data_len, stack_len)
+        regdef = self.gen_regdef(data_len, stack_len, cregs)
 
         return header + regdef + '\n' + code 

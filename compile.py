@@ -38,11 +38,11 @@ def main():
 
     # intermediate representation
     irgen = IRgenerator()
-    firstblock, data_len, stack_len = irgen.run(root, st)
+    firstblock, data_len, stack_len, cregs = irgen.run(root, st)
 
     # code generation
     codegen = codegenerator()
-    code = codegen.run(firstblock, data_len, stack_len)
+    code = codegen.run(firstblock, data_len, stack_len, cregs)
 
     print(code)
     file.close()

@@ -1,0 +1,15 @@
+What to do next?
+1. output classical registers (what to output? just output global variables or let user to specify output)
+2. implement more ISA instructions (mainly cmp)
+3. add FOR loop IR generation
+4. add more operators to BINARY2IR (bit operations, assignment operations), UNARY2IR
+5. JMP: break, continue
+6. initializers
+
+Thoughts: 
+could carry and tmp be reused? No, comparison need a sub operation, where sub_ex(a, b, tmp, carry) is used.
+
+
+
+
+

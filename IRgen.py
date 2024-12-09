@@ -72,9 +72,11 @@ class IRgenerator():
         return data_len, stack_len
 
     # convert each function to a control flow graph
+    # return the first basic block and the stack usage including temporary variables
     def AST2IR(self, node: 'S_node', st: symbolTable, stack_len: int) -> (basicBlock, 'new_stack_len'):
         cond_reg = memcell('cond_reg', 0, 1)
         cond_creg = memcell('cond_creg', 0, 1)
+        self.cregs = []
         def STMTLIST2IR(node: 'STMTLIST_node', st: symbolTable, stack_len: int) -> ('firstblock', 'lastblock', 'new_stack_len'):
             firstblock = basicBlock()
             lastblock = firstblock
@@ -128,7 +130,7 @@ class IRgenerator():
         # for these functions, if the returned memcell is a temporary, its starting address must equal to the stack_len argument.
         # i.e. the result is stored in lowest possible address.
         # if the returned memcell is a variable (for ACCESS node), the memcell should directly refer to that variable.
-        def EXPR2IR(node: 'EXPR_node/BINARY_node/UNARY_node/CPDEXPR_node/ACCESS_node/literal', st: symbolTable, stack_len: int) -> (['instruction'], 'new_stack_len', 'temp memcell'):
+        def EXPR2IR(node: 'EXPR_node/BINARY_node/UNARY_node/CPDEXPR_node/ACCESS_node/CALLEXPR_node/literal', st: symbolTable, stack_len: int) -> (['instruction'], 'new_stack_len', 'temp memcell'):
             # maybe handle literal values at other places where the value is actually used.
             # that gives us more information on choosing the length of the temp var and we can save stack space if the value is not used.
             # here we need to check if the EXPR is solely a literal. If so, the literal is unused and we can emit no code about it.
@@ -145,6 +147,8 @@ class IRgenerator():
             elif node.name == 'ACCESS': # for access, just return the variable, instead of creating temp vars
                 var = st.find(node.scope, node.children[0].value, node.children[0].row, node.children[0].col)
                 return [], stack_len, memcell(var.segment, var.addr, var.size)
+            elif node.name == 'CALLEXPR':
+                return CALL2IR(node, st, stack_len)
 
         def literal2IR(node: token, stack_len: int) -> (['instruction'], 'new_stack_len', 'temp memcell'):
             value = 0
@@ -237,6 +241,30 @@ class IRgenerator():
         def UNARY2IR(node: 'UNARY_node', st: symbolTable, stack_len: int) -> (['instruction'], 'new_stack_len', 'temp memcell'):
             pass # TODO
 
+        def CALL2IR(node: 'CALLEXPR_node', st: symbolTable, stack_len: int) -> (['instruction'], 'new_stack_len', 'temp memcell'):
+            # now we only have the print function
+            if node.children[0].value == 'print':
+                # evaluate EXPR in arglist
+                insts = []
+                arglist = node.children[1].children
+                argvars = []
+                stack_len_max = stack_len
+                for arg in arglist: # arg is EXPR, arg.children[0] is the actual expression
+                    arginsts, new_stack_len, t = EXPR2IR(arg, st, stack_len)
+                    insts += arginsts
+                    argvars.append(t)
+                    stack_len_max = max(stack_len_max, new_stack_len)
+                    if type(arg.children[0]) == token or arg.children[0].name != 'ACCESS':
+                        stack_len += t1.size
+                        stack_len_max = max(stack_len_max, stack_len)
+
+                # measure
+                creg = memcell(f'print_creg_{len(self.cregs)}', 0, argvars[0].size)
+                self.cregs.append(creg)
+                insts.append(instruction('measure', [argvars[0], creg])) 
+                return insts, stack_len_max, None
+            return [], stack_len, None
+
         def IFELSE2IR(node: 'IFELSE_node', st: symbolTable, stack_len: int) -> (branchBlock, 'new_stack_len'):
             ret = branchBlock()
             ret.firstblock = basicBlock()
@@ -295,10 +323,10 @@ class IRgenerator():
             if decl.name == 'FUNCDECL':
                 return STMTLIST2IR(decl.children[3], st, stack_len) # pass STMTLIST into STMTLIST2IR
     
-    def run(self, node: 'S_node', st: symbolTable) -> (basicBlock, 'data_len', 'stack_len'):
+    def run(self, node: 'S_node', st: symbolTable) -> (basicBlock, 'data_len', 'stack_len', 'classical_regs'):
         data_len, stack_len = self.assign_addr(st)
         firstblock, lastblock, stack_len = self.AST2IR(node, st, stack_len)
-        return firstblock, data_len, stack_len
+        return firstblock, data_len, stack_len, self.cregs
 
 def print_st(st: symbolTable, scope_num = 0, depth = 0):
     print('\t'*depth, f'Scope {scope_num}:')
@@ -371,11 +399,14 @@ def main():
             return
 
         irgen = IRgenerator()
-        firstblock, data_len, stack_len = irgen.run(root, st)
+        firstblock, data_len, stack_len, cregs = irgen.run(root, st)
         #print_st(st)
         print_CFG(firstblock)
         print('data section usage:', data_len)
         print('stack usage:', stack_len)
+        print('classical registers used by print:')
+        for creg in cregs:
+            print(creg.segment, creg.size)
         file.close()
 
 if __name__ == '__main__':

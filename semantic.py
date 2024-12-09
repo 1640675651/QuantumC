@@ -25,6 +25,8 @@ class semanticWarning():
     pass
 
 def typesize(t: str) -> int:
+    if t == 'void':
+        return 0
     if t.startswith('int'):
         return int(t.strip('int'))
     if t == 'char':
@@ -125,9 +127,14 @@ class semanticAnalyzer():
                     if var == None:
                         err = semanticError(row, col, f"undefined identifier {name}")
             elif node.name == 'CALLEXPR':
+                name = node.children[0].value
                 row = node.children[0].row
                 col = node.children[0].col
-                err = semanticError(row, col, "function call is not supported")
+                func = st.find(scope, name, row, col)
+                if func == None:
+                    err = semanticError(row, col, f"undefined identifier {name}")
+            if err != None:
+                return err
             #else: # need to recursively mark the the scope of all nodes
             for child in node.children:
                 if type(child) == token:
@@ -139,6 +146,9 @@ class semanticAnalyzer():
 
         st = symbolTable()
         cur_scope = 0
+        # insert the built-in print function
+        print_func = function('void', 'print', 0, 0, [('int', 'x')])
+        st.insert(0, print_func)
         
         decllist = node.children[0]
         for child in decllist.children:
@@ -212,15 +222,16 @@ class semanticAnalyzer():
                         return semanticError(operator.row, operator.col, '++/-- must operate on variables')
             # for assignment operators, LHS must be variable
             if node.name == 'BINARY':
-                lhs, operator = node.children[0], node.children[1]
+                lhs, operator, rhs = node.children
                 if operator.value in assignment_ops:
                     if type(lhs) != ACCESS_node:
                         return semanticError(operator.row, operator.col, 'the left hand side of an assignment operator must be a variable')
 
             for child in node.children:
+                child_inloop = inloop
                 if type(child) != token and (child.name == 'FOR' or child.name == 'WHILE'):
-                    inloop = True
-                err = typecheck_dfs(child, st, inloop)
+                    child_inloop = True
+                err = typecheck_dfs(child, st, child_inloop)
                 if err != None:
                     return err
 
@@ -242,10 +253,16 @@ class semanticAnalyzer():
                 if type(lhs) == token and type(rhs) == token:
                     node.size = max(litsize(lhs), litsize(rhs)) # 0 for literal, size not determined yet
                 if type(lhs) == token:
+                    if rhs.size == 0:
+                        return semanticError(operator.row, operator.col, f'cannot operate on void type')
                     node.size = rhs.size
                 elif type(rhs) == token:
+                    if lhs.size == 0:
+                        return semanticError(operator.row, operator.col, f'cannot operate on void type')
                     node.size = lhs.size
                 else:
+                    if lhs.size == 0 or rhs.size == 0:
+                        return semanticError(operator.row, operator.col, f'cannot operate on void type')
                     node.size = max(lhs.size, rhs.size)
             if node.name == 'UNARY':
                 operand = node.children[1]# default prefix operator
@@ -255,11 +272,27 @@ class semanticAnalyzer():
                     node.size = litsize(operand)
                 else:
                     node.size = operand.size
+                    if node.size == 0:
+                        return semanticError(operator.row, operator.col, f'cannot operate on void type')
             if node.name == 'ACCESS':
                 var = st.find(node.scope, node.children[0].value, node.children[0].row, node.children[0].col)
                 node.size = var.size
             if node.name == 'CPDEXPR':
                 node.size = node.children[0].size
+            if node.name == 'CALLEXPR':
+                identifier = node.children[0]
+                if inloop == True:
+                    return semanticError(identifier.row, identifier.col, 'function call in a loop is not supported')
+                func = st.find(node.scope, identifier.value, identifier.row, identifier.col)
+                node.size = typesize(func.ret_t)
+                # check the number of arguments
+                arglist = node.children[1].children
+                if len(arglist) != len(func.paramlist):
+                    return semanticError(identifier.row, identifier.col, f'number of argument mismatch, expect {len(func.paramlist)}, got {len(arglist)}')
+                # check through the arglist and find if there's void arguments
+                for i in arglist:
+                    if i.size == 0:
+                        return semanticError(identifier.row, identifier.col, f'argument has void type')
             return None
 
         return typecheck_dfs(node, st, False)
@@ -283,7 +316,7 @@ def print_ast(node, depth: int):
     print('\t'*depth + str(node), end = '')
     if type(node) != token: 
         size_str = ' '
-        if (node.name == 'EXPR' or node.name == 'UNARY' or node.name == 'BINARY' or node.name == 'ACCESS' or node.name == 'CPDEXPR'):
+        if (node.name == 'EXPR' or node.name == 'UNARY' or node.name == 'BINARY' or node.name == 'ACCESS' or node.name == 'CPDEXPR' or node.name == 'CALLEXPR'):
             size_str += str(node.size)
         print(size_str, node.scope, end = '')
     print()

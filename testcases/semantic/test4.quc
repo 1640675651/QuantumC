@@ -1,0 +1,12 @@
+// test error handling
+void main()
+{
+	int8 a;
+	int8 b;
+	while(a)
+	{
+		print(b);
+		a = a - 1;
+	}
+
+}

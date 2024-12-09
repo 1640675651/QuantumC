@@ -7,4 +7,5 @@ void main()
 	b = 7;
 	int4 c;
 	c = b - a;
+	print(c);
 }

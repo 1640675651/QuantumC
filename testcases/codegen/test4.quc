@@ -1,0 +1,23 @@
+// test nested while and ifelse
+void main()
+{
+	int4 a; int4 b; int4 c;
+	a = 5;
+	b = 0;
+	c = 0;
+	while(a)
+	{
+		if(b)
+		{
+			c = c + 1;
+		}
+		else
+		{
+			b = b + 1;
+		}
+		a = a - 1;
+	}
+	print(a);
+	print(b);
+	print(c);
+}

@@ -226,6 +226,7 @@ class semanticAnalyzer():
                 if operator.value in assignment_ops:
                     if type(lhs) != ACCESS_node:
                         return semanticError(operator.row, operator.col, 'the left hand side of an assignment operator must be a variable')
+                # TODO: cannot do > < >= <= on single-bit values
 
             for child in node.children:
                 child_inloop = inloop
@@ -252,7 +253,7 @@ class semanticAnalyzer():
                 # else:
                 if type(lhs) == token and type(rhs) == token:
                     node.size = max(litsize(lhs), litsize(rhs)) # 0 for literal, size not determined yet
-                if type(lhs) == token:
+                elif type(lhs) == token:
                     if rhs.size == 0:
                         return semanticError(operator.row, operator.col, f'cannot operate on void type')
                     node.size = rhs.size

@@ -2,7 +2,7 @@ Each register is represented by (segment, offset, length)
 e.g. ('stack', 4, 4) means stack[4:8]
 All values in little endian. LSB in low offset.
 
-Arithmetic instructions. Register size must match. 
+Arithmetic instructions. All operands must have the same size. 
 add r1, r2 (r2 = r1 + r2)
 sub r1, r2 (r2 = r1 - r2)
 
@@ -15,11 +15,15 @@ mod_ex r1, r2, r3 (r3 = r1%r2)
 Note, in low level, div and mod are implemented by the same operation. We handle that in codegen.
 In this way, the intermediate code is three-address code, easier to handle in the compiler.
 
+Comparison instructions. 
+For lt, gt, le, ge, all operands must have the same size. 
+For eq and ne, r1 and r2 must have the same size.
 lt r1, r2, r3 (r3 = (r1 < r2))
 gt
 le
 ge
 eq
+ne
 
 sl
 sr

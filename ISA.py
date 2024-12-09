@@ -1,6 +1,6 @@
 from IRgen import instruction, memcell
 
-# 1. single bit operations (for those with output bit, assume the bit is set to 0)
+# 0. quantum gates
 
 def x(b) -> list:
     return [f'x {b};']
@@ -11,8 +11,13 @@ def ccx(b1, b2, b3) -> list:
 def cx(b1, b2) -> list:
     return [f'cx {b1}, {b2};']
 
+def swap(b1, b2) -> list:
+    return [f'swap {b1}, {b2};']
+
 def reset(b) -> list:
     return [f'reset {b};']
+
+# 1. single bit operations (for those with output bit, assume the bit is set to 0)
 
 # c = a | b = ~(~a & ~b), Demorgan's law
 def bit_or(a: str, b: str, c: str) -> list:
@@ -78,6 +83,13 @@ def bitwise_nor(a, b, c) -> list:
     code += bitwise_not(b)
     return code
 
+# a = a << 1
+def lshift(a):
+    code = []
+    for i in range(a.size, 1, -1):
+        code += swap(a[i-1], a[i-2])
+    return code
+
 # 3. arithmetic operations
 
 # cin, a, b, cout are bits
@@ -133,12 +145,9 @@ def inst_add_ex(a, b, s, c) -> list:
 def inst_sub(a, b, c) -> list:
     code = []
     n = a.size
-    # reset carry
-    # for i in range(n):
-    #     code += reset(c[i])
     
     # create b's 2's complement
-    # 1) negate b
+    # 1) invert b
     code += bitwise_not(b)
 
     # 2) need to add 1 to b, but using the adder is overkill.
@@ -178,8 +187,85 @@ def inst_sub_ex(a, b, s, c) -> list:
     code += inst_sub(a, s, c)
     return code
 
+# a = a - b
+def sub_swap(a, b, c) -> list:
+    code = []
+    code += bitwise_not(a)
+    code += inst_add(b, a, c)
+    code += bitwise_not(a)
+    return code
+
+# p = p%d
+# q = p/d
+def div(p, d, q) -> list:
+    code = []
+    n = p.size//2
+    carry_reg = memcell('carry_reg', 0, 2*n)
+    for i in range(n, 0, -1):
+        code += lshift(p)
+        code += sub_swap(p, d, carry_reg)
+
+        code += x(p[2*n-1])
+        code += cx(p[2*n-1], q[i-1])
+        code += x(p[2*n-1])
+
+        # If |p> is negative, indicated by the (i-1)th bit of |q> being 0, add D back
+        # TODO: how to implement controlled add
+        # now only work for positive number
+        #code += x(q[i-1])
+        #code += cadd(q[i-1], d, p)
+        #code += x(q[i-1])
+    return code
+
+# q = p/d
+# need 4*n tmp bits and the carry register
+def div_ex(p, d, q) -> list:
+    code = []
+    n = p.size
+    p_copy = memcell('tmp_reg', 0, 2*n)
+    d_copy = memcell('tmp_reg', 2*n, 2*n)
+    d_upper = memcell('tmp_reg', 3*n, n)
+    # copy p to tmp_reg[0:2n]
+    code += copy(p, p_copy)
+    # copy d to tmp_reg[3n:4n]
+    code += copy(d, d_upper)
+    # reset d_lower (tmp_reg[2n:3n])
+    for i in range(n):
+        code += reset(d_copy[i])
+    # reset q
+    for i in range(n):
+        code += reset(q[i])
+    # after division, q = p / d.
+    code += div(p_copy, d_copy, q)
+    return code
+
+# r = p % d
+def mod_ex(p, d, r) -> list:
+    code = []
+    n = p.size
+    p_copy = memcell('tmp_reg', 0, 2*n)
+    p_upper = memcell('tmp_reg', n, n)
+    d_copy = memcell('tmp_reg', 2*n, 2*n)
+    d_upper = memcell('tmp_reg', 3*n, n)
+    # copy p to tmp_reg[0:2n]
+    code += copy(p, p_copy)
+    # copy d to tmp_reg[3n:4n]
+    code += copy(d, d_upper)
+    # reset d_lower (tmp_reg[2n:3n])
+    for i in range(n):
+        code += reset(d_copy[i])
+    # reset r
+    for i in range(n):
+        code += reset(r[i])
+    # after division, p % d is in the upper half of p_copy.
+    code += div(p_copy, d_copy, r)
+    # copy p_copy's upper half to r
+    code += copy(p_upper, r)
+    return code
+
 # 4. comparison operations
 # c = (a < b)
+# a, b, c must have the same size for < > <= >=
 def lt(a, b, c) -> list:
     code = []
     n = a.size

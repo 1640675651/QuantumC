@@ -102,15 +102,17 @@ class IRgenerator():
                     ifelse_block.next = lastblock
                     pass
                 if child.name == 'FOR':
-                    # treat loop as one single block
-                    pass
+                    for_block, new_stack_len = FOR2IR(child, st, stack_len)
+                    lastblock.next = for_block
+                    # create a new last block and point the next of the ifelse block to the new last block
+                    lastblock = basicBlock()
+                    for_block.next = lastblock
                 if child.name == 'WHILE':
                     while_block, new_stack_len = WHILE2IR(child, st, stack_len)
                     lastblock.next = while_block
                     # create a new last block and point the next of the ifelse block to the new last block
                     lastblock = basicBlock()
                     while_block.next = lastblock
-                    pass
                 if child.name == 'JMP':
                     pass
                 stack_len_max = max(stack_len_max, new_stack_len)
@@ -320,6 +322,49 @@ class IRgenerator():
             ret.lastblock.instructions = ret.firstblock.instructions
 
             return ret, stack_len_max
+        
+        def FOR2IR(node: 'FOR_node', st: symbolTable, stack_len: int) -> (loopBlock, 'new_stack_len'):
+            ret = loopBlock()
+            ret.firstblock = basicBlock()
+            ret.lastblock = basicBlock()
+
+            # evaluate FOREXPR
+            init, cond, postloop = node.children[0].children
+            # init expr
+            if len(init.children):
+                init_inst, new_stack_len, _ = EXPR2IR(init.children[0], st, stack_len)
+                ret.firstblock.instructions += init_inst
+                stack_len_max = max(stack_len, new_stack_len)
+
+            # for loop without condition expression is undefined behavior. The program depends on the current value of cond_reg.
+            # cond expr
+            cond_insts = []
+            if len(cond.children):
+                # evaluate condition EXPR
+                condexpr = cond.children[0]
+                cond_insts, new_stack_len, tempvar = EXPR2IR(condexpr, st, stack_len)
+                # store the evaluated bit to cond register
+                cond_insts.append(instruction('tobool', [tempvar, cond_reg]))
+                cond_insts.append(instruction('measure', [cond_reg, cond_creg]))
+                ret.firstblock.instructions += cond_insts
+                stack_len_max = max(stack_len, new_stack_len)
+
+            # generate loop body
+            loop_body = node.children[1]
+            body_fb, body_lb, new_stack_len = STMT2IR(loop_body, st, stack_len)
+            ret.bodyblock = body_fb
+            stack_len_max = max(stack_len, new_stack_len)
+
+            # add post-loop instructions to last block
+            if len(postloop.children):
+                post_insts, new_stack_len, _ = EXPR2IR(postloop.children[0], st, stack_len)
+                ret.lastblock.instructions += post_insts
+                stack_len_max = max(stack_len, new_stack_len)
+
+            # check loop condition after each iteration
+            ret.lastblock.instructions += cond_insts
+
+            return ret, stack_len_max
 
         for decl in node.children[0].children:
             if decl.name == 'FUNCDECL':
@@ -356,13 +401,13 @@ def print_CFG(blk, depth = 0):
         print('\t'*depth +'ENDIF')
 
     def print_loop(blk: loopBlock, depth):
-        print('\t'*depth + 'WHILE')
+        print('\t'*depth + 'PRELOOP')
         print_basic(blk.firstblock, depth+1)
-        print('\t'*depth + 'BODY')
+        print('\t'*depth + 'LOOP BODY')
         print_CFG(blk.bodyblock, depth+1)
-        print('\t'*depth + 'WHILE COND CHECK')
+        print('\t'*depth + 'LOOP COND CHECK')
         print_CFG(blk.lastblock, depth+1)
-        print('\t'*depth +'ENDWHILE')
+        print('\t'*depth +'ENDLOOP')
 
     while blk != None:
         if type(blk) == basicBlock:

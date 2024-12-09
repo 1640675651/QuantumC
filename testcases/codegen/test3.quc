@@ -1,0 +1,17 @@
+// calculate gcd(100, 60)
+void main()
+{
+	int8 a; int8 b; int8 r; 
+	a = 100;
+	b = 60;
+	r = a % b;
+
+	while(r)
+	{
+		a = b;
+		b = r;
+		r = a % b;
+	}
+
+	print(b);
+}

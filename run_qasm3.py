@@ -19,13 +19,11 @@ def dict_key_b2d(d: dict):
 qc = load(sys.argv[1])
 
 backend_sim = AerSimulator(max_parallel_threads=24, method='statevector')
-#backend_sim = Aer.get_backend('qasm_simulator')
-isa_qc = transpile(qc, backend_sim)
-#quantum_instance = QuantumInstance(backend_sim, progress_bar=ProgressBar())
+isa_qc = transpile(qc, backend_sim, optimization_level=3)
 #print(isa_qc.depth())
 
 def run():
-    job_sim = backend_sim.run(qc, shots=1)
+    job_sim = backend_sim.run(isa_qc, shots=1)
     result_sim = job_sim.result()
     print(dict_key_b2d(result_sim.get_counts()))
 

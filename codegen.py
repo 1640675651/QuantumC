@@ -28,6 +28,17 @@ class codegenerator():
             size = inst.operands[0].size
             self.carry_reg_usage = max(self.carry_reg_usage, size)
             return inst_sub_ex(inst.operands[0], inst.operands[1], inst.operands[2], memcell('carry_reg', 0, size))
+        # div and mod need 2n carry bits and 2*2n tmp bits
+        elif inst.name == 'div_ex':
+            size = inst.operands[0].size
+            self.carry_reg_usage = max(self.carry_reg_usage, 2*size)
+            self.tmp_reg_usage = max(self.tmp_reg_usage, 4*size)
+            return div_ex(inst.operands[0], inst.operands[1], inst.operands[2])
+        elif inst.name == 'mod_ex':
+            size = inst.operands[0].size
+            self.carry_reg_usage = max(self.carry_reg_usage, 2*size)
+            self.tmp_reg_usage = max(self.tmp_reg_usage, 4*size)
+            return mod_ex(inst.operands[0], inst.operands[1], inst.operands[2])
         elif inst.name == 'copy':
             return copy(inst.operands[0], inst.operands[1])
         elif inst.name == 'assign':

@@ -3,7 +3,7 @@ include "stdgates.inc";
 qubit[1] tmp_reg;
 qubit[4] carry_reg;
 qubit[1] cond_reg;
-qubit[20] stack;
+qubit[24] stack;
 bit[1] cond_creg;
 bit[4] print_creg_0;
 
@@ -155,12 +155,61 @@ while(cond_creg == 1)
 	cx stack[9], stack[5];
 	cx stack[10], stack[6];
 	cx stack[11], stack[7];
-	//assign [(stack, 16, 4), 1]
+	//assign [(stack, 20, 4), 1]
+	reset stack[20];
+	reset stack[21];
+	reset stack[22];
+	reset stack[23];
+	x stack[20];
+	//sub_ex [(stack, 12, 4), (stack, 20, 4), (stack, 16, 4)]
 	reset stack[16];
 	reset stack[17];
 	reset stack[18];
 	reset stack[19];
+	cx stack[20], stack[16];
+	cx stack[21], stack[17];
+	cx stack[22], stack[18];
+	cx stack[23], stack[19];
 	x stack[16];
+	x stack[17];
+	x stack[18];
+	x stack[19];
+	x carry_reg[0];
+	ccx stack[12], stack[16], carry_reg[1];
+	cx stack[12], stack[16];
+	ccx carry_reg[0], stack[16], carry_reg[1];
+	ccx stack[13], stack[17], carry_reg[2];
+	cx stack[13], stack[17];
+	ccx carry_reg[1], stack[17], carry_reg[2];
+	ccx stack[14], stack[18], carry_reg[3];
+	cx stack[14], stack[18];
+	ccx carry_reg[2], stack[18], carry_reg[3];
+	cx carry_reg[3], stack[19];
+	ccx carry_reg[2], stack[18], carry_reg[3];
+	cx stack[14], stack[18];
+	ccx stack[14], stack[18], carry_reg[3];
+	cx stack[14], stack[18];
+	cx carry_reg[2], stack[18];
+	ccx carry_reg[1], stack[17], carry_reg[2];
+	cx stack[13], stack[17];
+	ccx stack[13], stack[17], carry_reg[2];
+	cx stack[13], stack[17];
+	cx carry_reg[1], stack[17];
+	ccx carry_reg[0], stack[16], carry_reg[1];
+	cx stack[12], stack[16];
+	ccx stack[12], stack[16], carry_reg[1];
+	cx stack[12], stack[16];
+	cx carry_reg[0], stack[16];
+	x carry_reg[0];
+	//copy [(stack, 16, 4), (stack, 12, 4)]
+	reset stack[12];
+	reset stack[13];
+	reset stack[14];
+	reset stack[15];
+	cx stack[16], stack[12];
+	cx stack[17], stack[13];
+	cx stack[18], stack[14];
+	cx stack[19], stack[15];
 
 	//tobool [(stack, 12, 4), (cond_reg, 0, 1)]
 	reset cond_reg[0];
@@ -192,4 +241,3 @@ print_creg_0[0] = measure stack[8];
 print_creg_0[1] = measure stack[9];
 print_creg_0[2] = measure stack[10];
 print_creg_0[3] = measure stack[11];
-

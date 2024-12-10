@@ -18,7 +18,7 @@ def dict_key_b2d(d: dict):
 
 qc = load(sys.argv[1])
 
-backend_sim = AerSimulator(max_parallel_threads=24, method='statevector')
+backend_sim = AerSimulator(method='statevector')
 isa_qc = transpile(qc, backend_sim, optimization_level=3)
 #print(isa_qc.depth())
 

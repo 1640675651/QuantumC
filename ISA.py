@@ -116,6 +116,7 @@ def inst_add(a: memcell, b: memcell, c: memcell) -> list:
 
     # maybe calculate overflow bit, or just drop it
     # code += carry((c.segment, c.offset+n-1), (a.segment, a.offset+n-1), (b.segment, b.offset+n-1), (o.segment, o.offset))
+    code += cx(a[n-1], b[n-1])
 
     # calculate second-to-MSB
     code += cx(c[n-1], b[n-1])
@@ -161,7 +162,8 @@ def inst_sub(a, b, c) -> list:
 
     # maybe calculate overflow bit, or just drop it
     # code += carry((c.segment, c.offset+n-1), (a.segment, a.offset+n-1), (b.segment, b.offset+n-1), (o.segment, o.offset))
-
+    code += cx(a[n-1], b[n-1])
+    
     # calculate second-to-MSB
     code += cx(c[n-1], b[n-1])
 

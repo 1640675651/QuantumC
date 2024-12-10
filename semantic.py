@@ -205,6 +205,8 @@ class semanticAnalyzer():
                 if node.type == 'kw':
                     if node.value == 'return':
                         return semanticError(node.row, node.col, 'return statement is not supported') 
+                    if node.value == 'continue':
+                        return semanticError(node.row, node.col, 'continue statement is not supported') 
                     if (node.value == 'break' or node.value == 'continue') and inloop == False:
                         return semanticError(node.row, node.col, f'{node.value} not within loop context')
                 return None 

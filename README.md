@@ -78,5 +78,65 @@ python3 parser.py sourcefile\
 This will output the AST to stdout\
 Demo video: https://youtu.be/MKKk0_XGiAU (accessible with columbia.edu account)
 
+# Semantic Analysis
+
+## Scoping and Symbol Table
+In semantic analysis, we first dfs on the AST and construct the symbol table, meanwhile we annotate the scope of each AST node for further reference. To find a symbol in the symbol table, we need a scope number, identifier name, and the row and column number of the reference. The symbol table search through the scope hierarchy, if a definition before (row, col) is found, it returns the symbol. 
+
+## Type checking
+The type system is very simple in this compiler, since array and general function call are not supported at this time. Reasons will be explained later. All variables are numbers, we just do automatic truncation and extension. In the type checking phase, we annotate the size of each expression node for further reference.
+
+# Intermediate Representation
+
+## Control flow graph
+In normal compilers, control flow graph are just basic block and edges. Unlike classical computers, currently we don't have access to the program counter of quantum computers. QASM3 provides for/while/ifelse for control flow. To mimic the structure of QASM3, 3 types of blocks are used in our control flow graph. Each type of block has a pointer to the next block. 
+
+1) basicblock.
+   
+   A basicblock is just a list of instructions to be executed sequentially. 
+2) branchblock. A branch block contains:
+   
+   2.1) condition block, which contains instructions to evaluate the condition expression.
+   
+   2.2) then block, the first basic block in the then branch.
+   
+   2.3) else block, the first basic block in the else branch.
+3) loopblock. A loop block contains:
+   
+   3.1) preloop block, which contains instructions for initialization and condition expression evaluation.
+   
+   3.2) body block, the loop body.
+   
+   3.3) postloop block, which contains instructions for operations after each iteration and condition evaluation for the next iteration.
+
+## Intermediate code/"ISA"
+In QASM3, the instructions for quantum computers are bit-level gates. A higher level instruction set is introduced to represent the register-level arithmetic and logical operations. See ISA.txt for details.
+
+# Code Generation
+To convert intermediate code to QASM3, we need to implement each instruction in the instruction set, somewhat like writing ALUs for an FPGA. The arithmetic operations are adapted from the open-source QArithmetic library: https://github.com/hkhetawat/QArithmetic/tree/master
+
+# Memory Layout
+In today's quantum computers we actually do not have RAM. All we have is an array of qubits. We can treat them as registers or memory cells, whatever we like. For clearer memory management, we intentionally divide the qubits to memory and registers.
+
+## Registers
+1) Carry. Carry bits used in arithmetic operations.
+2) Tmp. Some operations requires temporary registers. For example, to implement a comparator, we subtract two operands and use the sign bit as result. The result of the subtraction needs to be stored in tmp.
+3) Cond. A single-bit register holding the result of condition evaluation. 
+
+## Memory
+1) Stack. Contains local variables and temporary variables.
+2) Data. Contains global variables.
+
+# Limitations
+1) Function call. As mentioned above, we cannot manipulate the program counter of a quantum computer. goto/call/return are not possible.
+2) Arrays and dynamic memory. In QASM3, all operands must have fixed address. Therefore, the address of all variables must be determined at compile time.
+3) Printing in loops. Print() calls are implemented through measurements, which moves information from quantum registers to classical registers. All classical registers must be declared in the beggining of the QASM3 program. The compiler must know the number of prints at compile time.
+
+# How to run
+To compile, run python3 compile.py sourcefile. The output is out.qasm3.
+
+To run qasm3 file, we need qiskit Aer simulator. Installing qiskit: https://docs.quantum.ibm.com/guides/install-qiskit. This need to be installed in a python virtual environment. In the virtual environment, install qiskit-aer: https://qiskit.github.io/qiskit-aer/getting_started.html 
+
+After these packages are installed, run python3 run_qasm3.py out.qasm3. The result will be in a dictionary format. The key is the result. One thing to notice is that quantum simulation is very resource-consuming since its time and memory complexity scales exponentially with the number of qubits. On my computer with 32GB of RAM, the maximum number of qubits can be simulated is about 30, so refrain from using large data types...
 # Team member
 Hongzheng Zhu hz2915

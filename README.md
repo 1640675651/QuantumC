@@ -135,7 +135,11 @@ In today's quantum computers we actually do not have RAM. All we have is an arra
 # How to run
 To compile, run python3 compile.py sourcefile. The output is out.qasm3.
 
-To run qasm3 file, we need qiskit Aer simulator. Installing qiskit: https://docs.quantum.ibm.com/guides/install-qiskit. This need to be installed in a python virtual environment. In the virtual environment, install qiskit-aer: https://qiskit.github.io/qiskit-aer/getting_started.html 
+To run qasm3 file, we need qiskit Aer simulator. Installing qiskit: https://docs.quantum.ibm.com/guides/install-qiskit. This need to be installed in a python virtual environment. In the virtual environment, install qiskit-aer and qiskit_qasm3_import:
+
+pip install qiskit-aer
+
+pip install qiskit_qasm3_import
 
 After these packages are installed, run python3 run_qasm3.py out.qasm3. The result will be in a dictionary format. The key is the result. One thing to notice is that quantum simulation is very resource-consuming since its time and memory complexity scales exponentially with the number of qubits. On my computer with 32GB of RAM, the maximum number of qubits can be simulated is about 30, so refrain from using large data types...
 # Team member

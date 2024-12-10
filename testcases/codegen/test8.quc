@@ -1,0 +1,6 @@
+// test type error
+void main()
+{
+	int4 a; int4 b;
+	b = print(a);
+}

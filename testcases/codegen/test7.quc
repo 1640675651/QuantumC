@@ -1,0 +1,6 @@
+// test wrong number of arguments
+void main()
+{
+	int4 a; int4 b;
+	print(a, b);
+}

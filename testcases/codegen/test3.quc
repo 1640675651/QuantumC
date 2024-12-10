@@ -1,4 +1,5 @@
 // calculate gcd(100, 60)
+// uses a lot of qubits, not runnable on a simulator
 void main()
 {
 	int8 a; int8 b; int8 r; 

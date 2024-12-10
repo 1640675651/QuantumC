@@ -128,9 +128,12 @@ In today's quantum computers we actually do not have RAM. All we have is an arra
 2) Data. Contains global variables.
 
 # Limitations
-1) Function call. As mentioned above, we cannot manipulate the program counter of a quantum computer. goto/call/return are not possible.
-2) Arrays and dynamic memory. In QASM3, all operands must have fixed address. Therefore, the address of all variables must be determined at compile time.
-3) Printing in loops. Print() calls are implemented through measurements, which moves information from quantum registers to classical registers. All classical registers must be declared in the beggining of the QASM3 program. The compiler must know the number of prints at compile time.
+1) (Not possible) Function calls. As mentioned above, we cannot manipulate the program counter of a quantum computer. goto/call/return are not possible.
+2) (Not possible) Arrays and dynamic memory. In QASM3, all operands must have fixed address. Therefore, the address of all variables must be determined at compile time.
+3) (Not possible) Printing in loops. Print() calls are implemented through measurements, which moves information from quantum registers to classical registers. All classical registers must be declared in the beggining of the QASM3 program. The compiler must know the number of prints at compile time.
+4) (To be implemented) Unary operators and assignment operators. Please write i = i+1 instead of i++/i+=1.
+5) (To be implemented) Variable initializers. For now use "intN a; a = X;" instead of "intN a = X;"
+6) (To be implemented) Multiple variable declaration. E.g. intN a, b, c;
 
 # How to run
 To compile, run python3 compile.py sourcefile. The output is out.qasm3.
@@ -142,5 +145,7 @@ pip install qiskit-aer
 pip install qiskit_qasm3_import
 
 After these packages are installed, run python3 run_qasm3.py out.qasm3. The result will be in a dictionary format. The key is the result. One thing to notice is that quantum simulation is very resource-consuming since its time and memory complexity scales exponentially with the number of qubits. On my computer with 32GB of RAM, the maximum number of qubits can be simulated is about 30, so refrain from using large data types...
+
+Demo video: https://youtu.be/PfZdZjOrxMo (accessible with columbia.edu account)
 # Team member
 Hongzheng Zhu hz2915

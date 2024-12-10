@@ -134,6 +134,8 @@ In today's quantum computers we actually do not have RAM. All we have is an arra
 4) (To be implemented) Unary operators and assignment operators. Please write i = i+1 instead of i++/i+=1.
 5) (To be implemented) Variable initializers. For now use "intN a; a = X;" instead of "intN a = X;"
 6) (To be implemented) Multiple variable declaration. E.g. intN a, b, c;
+7) (To be implemented) Continue statement
+8) (To be implemented) Bitwise and shifting opreators
 
 # How to run
 To compile, run python3 compile.py sourcefile. The output is out.qasm3.

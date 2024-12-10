@@ -114,7 +114,8 @@ class IRgenerator():
                     lastblock = basicBlock()
                     while_block.next = lastblock
                 if child.name == 'JMP':
-                    pass
+                    if child.children[0].value == 'break':
+                        lastblock.instructions.append(instruction('break', []))
                 stack_len_max = max(stack_len_max, new_stack_len)
             return firstblock, lastblock, stack_len_max
 

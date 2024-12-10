@@ -73,6 +73,8 @@ class codegenerator():
             return ne(inst.operands[0], inst.operands[1], inst.operands[2])
         elif inst.name == 'measure':
             return measure(inst.operands[0], inst.operands[1])
+        elif inst.name == 'break':
+            return ['break;']
 
         return []
     
